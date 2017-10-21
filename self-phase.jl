@@ -91,7 +91,9 @@ const n_tot_0 = 1+ C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
 #= How is this to be translated?
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
 l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
-=#
+This should do it I believe:=#
+const l1min = λ_tot[(abs(λ_tot - lmin) == min(abs(λ_tot-lmin))) + 1]
+const l1max = λ_tot[(abs(λ_tot - lmax) == max(abs(λ_tot-lmax))) + 1]
 
 const ρ_crit = ωω.^2*m*ϵ0/ee^2
 const k_Ar   = ceil(Ui_Ar / (hbar*ωω))
@@ -107,11 +109,11 @@ const k_Ar   = ceil(Ui_Ar / (hbar*ωω))
 # Initialisation #
 ##################
 # Electric Field
-E  = exp(-t_vec.^2/σ_t^2)
-E0 = sqrt(2*Power/(pi*Fiber_D^2))
-E = E0 .* E
+E                 = exp(-t_vec.^2/σ_t^2)
+E0                = sqrt(2*Power/(pi*Fiber_D^2))
+E                 = E0 .* E
 spectrum_entrance = abs(fftshift(fft(fftshift(E)))).^2
-I_entrance = sum(spectrum_entrance)
+I_entrance        = sum(spectrum_entrance)
 
 # Propagation variables
 zpoints       = 1000
@@ -123,17 +125,16 @@ It_dist       = zeros(Nt,zpoints)
 spectrum_dist = zeros(Nt,zpoints)
 
 Chirp_function = Chirp * ωω .^ 2 + TOD .* ωω .^ 3
-E_TF = fftshift(fft(fftshift(E))).*exp(im * Chirp_function)
-E = ifftshift(ifft(ifftshift(E_TF)))
+E_TF           = fftshift(fft(fftshift(E))).*exp(im * Chirp_function)
+E              = ifftshift(ifft(ifftshift(E_TF)))
 
 #Clear vars
-Chirp_function = nothing
-E_TF = nothing
+Chirp_function = nothing; E_TF           = nothing; gc()
 
-z = 0
-JJJ=0
-dz=dz0
-ZZZ=0
+z   = 0
+JJJ = 0
+dz  = dz0
+ZZZ = 0
 
 idxp = 2:Nt
 idxn = Nt:(Nt-1)
@@ -160,3 +161,4 @@ end
 =#
 while z <= zmax
     pressure = calc_pressure(0.008, Pressure, z, zmax)
+end
