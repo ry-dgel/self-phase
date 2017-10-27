@@ -152,6 +152,35 @@ function calc_pressure(p_in, p_out, z, zmax)
     return sqrt(p_in^2 + (z/zmax)*(p_out^2-p_in^2))
 end
 
+function calc_duration(E, t1)
+    center_pulse = sum(t1.*(abs(E)).^2)/sum(abs(E).^2) #Remove . from /?
+    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs(E).^2)
+                               / sum(abs(E).^2)).^0.5)*1E15
+end
+
+function plasma(dt, α, ρ_at, Potentiel_Ar, E, C2_Ar, Nt)
+    #Init
+    ρ_Ar = zeros(size(E))
+
+    for i in 1:Nt-1
+        ρ_Ar[i+1] = ρ_Ar[i]
+                    + dt * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_ar[i])
+                            + (C2_Ar * abs(E[q])^2)*ρ_ar[i])
+    end
+
+    return ρ_Ar
+end
+
+function prop_lin(deriv_t_2, dz1, E, losses)
+    # Shift to frequency domain and compute linear propagation
+    E_TF = fftshift(fft(fftshift(E))) .* exp(1im*(deriv_t_2)*dz1)
+    # Shift back to time domain, compute losses and return
+    return ifftshift(ifft(ifftshift(E_TF))).*exp(-losses/2 * dz1)
+end
+
+function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
+    return E.*exp(rrr*ρ*dz - losses + kerr_response)
+
 #=
 ███    ███  █████  ██ ███    ██
 ████  ████ ██   ██ ██ ████   ██
