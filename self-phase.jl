@@ -1,3 +1,7 @@
+using Revise
+using Interpolations
+#using Plots
+
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
 ██      ██    ██ ████   ██ ██         ██    ██   ██ ████   ██    ██    ██
@@ -79,7 +83,7 @@ const dt=tmax/(Nt-1)             # Time step
 const t_vec = collect((1:Nt)*dt) # Vector of times
 
 const ff=t_vec./tmax
-const ωω=(2*pi)*FF
+const ωω=(2*pi)*ff
 
 const λ_tot = 1E9 * c ./ (f + ff)
 const ωω_tot = ω+ωω
@@ -92,11 +96,11 @@ const n_tot_0 = 1+ C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
 l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
 This should do it I believe:=#
-const l1min = λ_tot[(abs(λ_tot - lmin) == min(abs(λ_tot-lmin))) + 1]
-const l1max = λ_tot[(abs(λ_tot - lmax) == max(abs(λ_tot-lmax))) + 1]
+const l1min = λ_tot[(abs.(λ_tot - lmin) == minimum(abs.(λ_tot-lmin))) + 1]
+const l1max = λ_tot[(abs.(λ_tot - lmax) == maximum(abs.(λ_tot-lmax))) + 1]
 
-const ρ_crit = ωω.^2*m*ϵ0/ee^2
-const k_Ar   = ceil(Ui_Ar / (hbar*ωω))
+const ρ_crit = ωω.^2*me*ϵ0/ee^2
+const k_Ar   = ceil(Ui_Ar ./ (hb*ωω))
 
 #=
 ██    ██  █████  ██████  ██  █████  ██████  ██      ███████ ███████
@@ -109,10 +113,10 @@ const k_Ar   = ceil(Ui_Ar / (hbar*ωω))
 # Initialisation #
 ##################
 # Electric Field
-E                 = exp(-t_vec.^2/σ_t^2)
+E                 = exp.(-t_vec.^2/σ_t^2)
 E0                = sqrt(2*Power/(pi*Fiber_D^2))
 E                 = E0 .* E
-spectrum_entrance = abs(fftshift(fft(fftshift(E)))).^2
+spectrum_entrance = abs.(fftshift(fft(fftshift(E)))).^2
 I_entrance        = sum(spectrum_entrance)
 
 # Propagation variables
@@ -125,7 +129,7 @@ It_dist       = zeros(Nt,zpoints)
 spectrum_dist = zeros(Nt,zpoints)
 
 Chirp_function = Chirp * ωω .^ 2 + TOD .* ωω .^ 3
-E_TF           = fftshift(fft(fftshift(E))).*exp(im * Chirp_function)
+E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
 E              = ifftshift(ifft(ifftshift(E_TF)))
 
 #Clear vars
@@ -149,11 +153,20 @@ pressure = []
 ██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
 =#
 function calc_pressure(p_in, p_out, z, zmax)
-    return sqrt(p_in^2 + (z/zmax)*(p_out^2-p_in^2))
+    #=
+    Calculate pressure along fiber
+    param p_in:  Pressure at input of fiber
+    param p_out: Pressure at exit of fiber
+    param z:     Position to calculate pressure at
+    param zmax:  Length of fiber
+
+    return: Pressure at z
+    =#
+    return sqrt(p_in^2 + (z/zmax) * (p_out^2-p_in^2))
 end
 
 function calc_duration(E, t1)
-    center_pulse = sum(t1.*(abs(E)).^2)/sum(abs(E).^2) #Remove . from /?
+    center_pulse = sum(t1.*(abs(E)).^2)/sum(abs(E).^2)
     return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs(E).^2)
                                / sum(abs(E).^2)).^0.5)*1E15
 end
@@ -180,7 +193,7 @@ end
 
 function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
     return E.*exp(rrr*ρ*dz - losses + kerr_response)
-
+end
 #=
 ███    ███  █████  ██ ███    ██
 ████  ████ ██   ██ ██ ████   ██
@@ -188,6 +201,6 @@ function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
 ██  ██  ██ ██   ██ ██ ██  ██ ██
 ██      ██ ██   ██ ██ ██   ████
 =#
-while z <= zmax
-    pressure = calc_pressure(0.008, Pressure, z, zmax)
-end
+#while z <= zmax
+#    pressure = calc_pressure(0.008, Pressure, z, zmax)
+#end
