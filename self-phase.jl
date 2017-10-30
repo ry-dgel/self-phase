@@ -37,8 +37,8 @@ const zmax = Fiber_L # Total z
 const Nt=2*8192          # Number of time steps
 const tmax=1200E-15      # Maximum time
 
-const lmin = 400
-const lmax = 1500
+const λ_min = 400
+const λ_max = 1500
 ###################
 # Fixed Constants #
 ###################
@@ -59,7 +59,14 @@ const C4 = 0.0415
 const C5 = 87.892
 const C6 = 4.3330
 const C7 = 214.02
-const C = [C1,C2,C3,C4,C5,C6,C7]
+
+#Indices of Refraction for Fused Silica
+const Cfs1 = 0.6961663;
+const Cfs2 = 0.0684043;
+const Cfs3 = 0.4079426;
+const Cfs4 = 0.1162414;
+const Cfs5 = 0.8974794;
+const Cfs6 = 9.896161;
 
 # Plasma Ionization Constants
 const a0 = -185.8
@@ -80,7 +87,7 @@ const σ_t = Tfwhm/sqrt(2*log(2))        # 1-sigma width of pulse
 const Power = sqrt(2/pi) * Energy/σ_t   # Max power delivered by pulse
 
 const dt=tmax/(Nt-1)             # Time step
-const t_vec = collect((1:Nt)*dt) # Vector of times
+const t_vec = collect((-Nt/2:1:Nt/2)*dt) # Vector of times
 
 const ff=t_vec./tmax
 const ωω=(2*pi)*ff
@@ -92,15 +99,24 @@ const n_tot_0 = 1+ C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
                          C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
                          C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
 
+const n_fs = 1 + C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
+                       C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
+                       C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
+
+
+const n_fs
+
 #= How is this to be translated?
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
 l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
 This should do it I believe:=#
-const l1min = λ_tot[(abs.(λ_tot - lmin) == minimum(abs.(λ_tot-lmin))) + 1]
-const l1max = λ_tot[(abs.(λ_tot - lmax) == maximum(abs.(λ_tot-lmax))) + 1]
+λ_test = minimum(abs.(λ_tot-lmin)))
+const λ1_min = filter(x -> abs(λ_tot - lmin) == λ_test, λ_tot)
+λ_test = minimum(abs.(λ_tot-lmax)))
+const λ1_max = filter(x -> abs(λ_tot - lmin) == λ_test, λ_tot)
 
 const ρ_crit = ωω.^2*me*ϵ0/ee^2
-const k_Ar   = ceil(Ui_Ar ./ (hb*ωω))
+const k_Ar   = ceil.(Ui_Ar ./ (hb*ωω))
 
 #=
 ██    ██  █████  ██████  ██  █████  ██████  ██      ███████ ███████
@@ -194,6 +210,15 @@ end
 function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
     return E.*exp(rrr*ρ*dz - losses + kerr_response)
 end
+
+function calc_compression(width)
+    λ_test = minimum(abs.(λ_tot - 600))
+    λ_begin = filter(x -> abs(x - 600) == λ_test && x > 0, λ_tot)
+
+    λ_test = minimum(abs.(λ_tot - 6000))
+    λ_final = filter(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)
+end
+
 #=
 ███    ███  █████  ██ ███    ██
 ████  ████ ██   ██ ██ ████   ██
@@ -204,3 +229,5 @@ end
 #while z <= zmax
 #    pressure = calc_pressure(0.008, Pressure, z, zmax)
 #end
+
+calc_compression(1,1,1,1)
