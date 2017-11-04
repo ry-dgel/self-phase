@@ -10,3 +10,4 @@ Done by Rigel and Joseph as part of undergraduate thesis.
 * Turn chunks of main loop into functions
 * Optimize
 * Test
+* Use plan fft/ifft to speed up all the transforms
