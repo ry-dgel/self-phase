@@ -13,17 +13,17 @@ using Interpolations
 # Simulation Parameters #
 #########################
 # Experimental Parameters
-const Energy   = # Pulse Energy       J
-const Tfwhm    = # Pulse Width        s
-const Chirp    = # Pulse Chirp        s
-const λ        = # Pulse Wavelength   m
+const Energy   = 0.8E-3     # Pulse Energy       J
+const Tfwhm    = 130E-15     # Pulse Width        s
+const Chirp    = 0          # Pulse Chirp        s^2
+const λ        = 800E-9     # Pulse Wavelength   m
 
-const Fiber_D  = # Fiber Diameter     m
-const Fiber_L  = # Fiber Length       m
-const Pressure = # Capillary Pressure Pa
+const Fiber_D  = 270E-6     # Fiber Diameter     m
+const Fiber_L  = 100E-3     # Fiber Length       m
+const Pressure = 1.4E3      # Capillary Pressure Pa
 
-const TOD      = # ??
-const losses   = # ??
+const TOD      = 0          # 3rd Order Disp.    s^3
+const losses   = 0.13       # Absorption Coef.   1/m
 
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13
@@ -103,19 +103,16 @@ const n_fs = 1 + C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
                        C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
                        C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
 
-
-const n_fs
-
 #= How is this to be translated?
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
 l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
 This should do it I believe:=#
-λ_test = minimum(abs.(λ_tot-lmin)))
-const λ1_min = filter(x -> abs(λ_tot - lmin) == λ_test, λ_tot)
-λ_test = minimum(abs.(λ_tot-lmax)))
-const λ1_max = filter(x -> abs(λ_tot - lmin) == λ_test, λ_tot)
+λ_test = minimum(abs.(λ_tot-λ_min))
+const λ1_min = filter(x -> abs.(λ_tot - λ_min) == λ_test, λ_tot)
+λ_test = minimum(abs.(λ_tot-λ_max))
+const λ1_max = filter(x -> abs.(λ_tot - λ_max) == λ_test, λ_tot)
 
-const ρ_crit = ωω.^2*me*ϵ0/ee^2
+const ρ_crit = ω^2*me*ϵ0/ee^2
 const k_Ar   = ceil.(Ui_Ar ./ (hb*ωω))
 
 #=
@@ -182,29 +179,28 @@ function calc_pressure(p_in, p_out, z, zmax)
 end
 
 function calc_duration(E, t1)
-    center_pulse = sum(t1.*(abs(E)).^2)/sum(abs(E).^2)
-    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs(E).^2)
-                               / sum(abs(E).^2)).^0.5)*1E15
+    center_pulse = sum(t1.*(abs.(E)).^2)/sum(abs.(E).^2)
+    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs.(E).^2)
+                               / sum(abs.(E).^2)).^0.5)*1E15
 end
 
 function plasma(dt, α, ρ_at, Potentiel_Ar, E, C2_Ar, Nt)
     #Init
     ρ_Ar = zeros(size(E))
 
-    for i in 1:Nt-1
-        ρ_Ar[i+1] = ρ_Ar[i]
-                    + dt * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_ar[i])
-                            + (C2_Ar * abs(E[q])^2)*ρ_ar[i])
+    for i in 1:(Nt-1)
+        ρ_Ar[i+1] = ρ_Ar[i] +
+                    dt * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
+                    (C2_Ar * abs(E[i])^2)*ρ_Ar[i])
     end
-
     return ρ_Ar
 end
 
 function prop_lin(deriv_t_2, dz1, E, losses)
     # Shift to frequency domain and compute linear propagation
-    E_TF = fftshift(fft(fftshift(E))) .* exp(1im*(deriv_t_2)*dz1)
+    E_TF = fftshift(fft(fftshift(E))) .* exp.(1im*(deriv_t_2)*dz1)
     # Shift back to time domain, compute losses and return
-    return ifftshift(ifft(ifftshift(E_TF))).*exp(-losses/2 * dz1)
+    return ifftshift(ifft(ifftshift(E_TF))).*exp.(-losses/2 * dz1)
 end
 
 function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
@@ -229,5 +225,3 @@ end
 #while z <= zmax
 #    pressure = calc_pressure(0.008, Pressure, z, zmax)
 #end
-
-calc_compression(1,1,1,1)
