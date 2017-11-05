@@ -1,5 +1,5 @@
 using Revise
-using Interpolations
+using Dierckx
 #using Plots
 
 #=
@@ -59,6 +59,7 @@ const C4 = 0.0415
 const C5 = 87.892
 const C6 = 4.3330
 const C7 = 214.02
+const C = [C1,C2,C3,C4,C5,C6,C7]
 
 #Indices of Refraction for Fused Silica
 const Cfs1 = 0.6961663;
@@ -67,6 +68,7 @@ const Cfs3 = 0.4079426;
 const Cfs4 = 0.1162414;
 const Cfs5 = 0.8974794;
 const Cfs6 = 9.896161;
+const Cfs = [Cfs1,Cfs2,Cfs3,Cfs4,Cfs5, Cfs6]
 
 # Plasma Ionization Constants
 const a0 = -185.8
@@ -87,9 +89,10 @@ const σ_t = Tfwhm/sqrt(2*log(2))        # 1-sigma width of pulse
 const Power = sqrt(2/pi) * Energy/σ_t   # Max power delivered by pulse
 
 const dt=tmax/(Nt-1)             # Time step
-const t_vec = collect((-Nt/2:1:Nt/2)*dt) # Vector of times
+const points = (-Nt/2:1:Nt/2)
+const t_vec = (-Nt/2:1:Nt/2)*dt  # Iteration of timesteps
 
-const ff=t_vec./tmax
+const ff=points./tmax
 const ωω=(2*pi)*ff
 
 const λ_tot = 1E9 * c ./ (f + ff)
@@ -98,10 +101,6 @@ const ωω_tot = ω+ωω
 const n_tot_0 = 1+ C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
                          C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
                          C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
-
-const n_fs = 1 + C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
-                       C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
-                       C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
 
 #= How is this to be translated?
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
@@ -207,12 +206,33 @@ function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
     return E.*exp(rrr*ρ*dz - losses + kerr_response)
 end
 
-function calc_compression(width)
+function calc_compression(width, Cs)
     λ_test = minimum(abs.(λ_tot - 600))
-    λ_begin = filter(x -> abs(x - 600) == λ_test && x > 0, λ_tot)
+    λ_begin = filter(x -> abs(x - 600) == λ_test && x > 0, λ_tot)[1]
 
     λ_test = minimum(abs.(λ_tot - 6000))
-    λ_final = filter(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)
+    λ_final = filter(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)[1]
+
+    n_fs = sqrt.(1 + Cs[1].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[2].^2) +
+                     Cs[3].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[4].^2) +
+                     Cs[5].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[6].^2))
+
+    n_begin = n_fs[find(x->x==λ_begin, λ_tot)][1]
+    n_fs[find(x->x>λ_final, λ_tot)] = n_begin
+
+    n_interp_fs = Spline1D(ωω_tot, n_fs)
+    n_fs_tot = evaluate(n_interp_fs, ωω_tot) #Is this not the same as n_fs??
+    dn_fs_tot = derivative(n_interp_fs, ωω_tot)
+
+    k_FS=n_fs_tot.*ωω_tot/c
+    k_FS[find(x->x<245,λ_tot)]=maximum(k_FS)
+
+    k_prime_FS=1./c.*(dn_fs_tot.*ωω_tot+n_fs_tot)
+
+    k0_FS=k_FS[findfirst(x->x==ω,ωω_tot)]
+    k1_FS=k_prime_FS[findfirst(x->x==ω,ωω_tot)]
+
+    return [(k_FS-k0_FS-k1_FS.*ω).*(w.*1e-3) for w in width]
 end
 
 #=
