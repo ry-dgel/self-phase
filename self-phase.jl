@@ -235,6 +235,24 @@ function calc_compression(width, Cs)
     return [(k_FS-k0_FS-k1_FS.*ω).*(w.*1e-3) for w in width]
 end
 
+function smooth(values, radius)
+    smoothed_values = zeros(size(values))
+    smoothed_values[1], smoothed_values[end] = values[1], values[end]
+    for i in 2:(length(values) - 1)
+        temp_radius = minimum([radius, i - 1, length(values) - i])
+        smoothed_values[i] = mean(values[(i - temp_radius):(i + temp_radius)])
+    end
+    return smoothed_values
+end
+
+function steepening(E1, idxp, idxn, γ_2, γ_4, γ_6, γ_8, γ_10, ω_0, dt, dz)
+    NL = (γ_2 * abs.(E1)^2 + γ_4 * abs.(E1)^4 + γ_6 * abs.(E1)^6 +
+        γ_8 * abs.(E1)^8 + γ_10 * abs.(E1)^10) * dz
+    Temp = NL .* E1
+    k1 = (im / ω_0) * ((Temp[idxp] - Temp[idxn])/(2 * dt))
+    E_temp = 0
+end
+
 #=
 ███    ███  █████  ██ ███    ██
 ████  ████ ██   ██ ██ ████   ██
