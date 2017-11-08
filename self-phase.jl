@@ -49,7 +49,7 @@ const me = 9.10938356E-31   # Electron Mass      kg
 const ee = 1.6021766208E-19 # Elementary Charge  C
 const ϵ0 = 8.854187817E-12  # Vaccum Permitivity F/m
 const Kb = 1.38064852E-23   # Boltzmann Constant J/K
-const T  = 300              # ~Room Temperature  K
+const T  = 300              # ~Room Temperature  Ka generalized theory of flexa
 
 # Indices of refraction/dispersion for Argon
 const C1 = 0.012055
@@ -209,21 +209,23 @@ end
 function calc_compression(width, Cs)
     λ_test = minimum(abs.(λ_tot - 600))
     λ_begin = filter(x -> abs(x - 600) == λ_test && x > 0, λ_tot)[1]
-
+    println(λ_begin)
     λ_test = minimum(abs.(λ_tot - 6000))
     λ_final = filter(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)[1]
-
-    n_fs = sqrt.(1 + Cs[1].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[2].^2) +
-                     Cs[3].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[4].^2) +
-                     Cs[5].*(λ_tot*1E3).^2./((λ_tot*1E3).^2-Cs[6].^2))
-
+    println(λ_final)
+    n_fs = sqrt.(1 + Cs[1].*(λ_tot).^2./((λ_tot).^2-Cs[2].^2) +
+                     Cs[3].*(λ_tot).^2./((λ_tot).^2-Cs[4].^2) +
+                     Cs[5].*(λ_tot).^2./((λ_tot).^2-Cs[6].^2))
+    println(mean(n_fs))
     n_begin = n_fs[find(x->x==λ_begin, λ_tot)][1]
-    n_fs[find(x->x>λ_final, λ_tot)] = n_begin
-
+    n_fs[find(x->x<λ_begin, λ_tot)] = n_begin
+    println(mean(n_fs))
+    n_final = n_fs[find(x->x==λ_final, λ_tot)][1]
+    n_fs[find(x->x>λ_final, λ_tot)] = n_final
+    println(mean(n_fs))
     n_interp_fs = Spline1D(ωω_tot, n_fs)
     n_fs_tot = evaluate(n_interp_fs, ωω_tot) #Is this not the same as n_fs??
     dn_fs_tot = derivative(n_interp_fs, ωω_tot)
-
     k_FS=n_fs_tot.*ωω_tot/c
     k_FS[find(x->x<245,λ_tot)]=maximum(k_FS)
 
