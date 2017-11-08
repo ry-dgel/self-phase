@@ -1,5 +1,6 @@
 using Revise
 using Dierckx
+using SpecialFunctions
 #using Plots
 
 #=
@@ -44,31 +45,31 @@ const λ_max = 1500
 ###################
 # General Physics Constants
 const c  = 299792458        # Speed of light     m/s
-const hb = 1.0545718E-34    # Reduced Planck     Js
+const ħ = 1.0545718E-34    # Reduced Planck     Js
 const me = 9.10938356E-31   # Electron Mass      kg
 const ee = 1.6021766208E-19 # Elementary Charge  C
 const ϵ0 = 8.854187817E-12  # Vaccum Permitivity F/m
 const Kb = 1.38064852E-23   # Boltzmann Constant J/K
 const T  = 300              # ~Room Temperature  Ka generalized theory of flexa
 
-# Indices of refraction/dispersion for Argon
-const C1 = 0.012055
-const C2 = 0.2075
-const C3 = 91.012
-const C4 = 0.0415
-const C5 = 87.892
-const C6 = 4.3330
-const C7 = 214.02
+# Indices of refraction/dispersion for Argon 1/nm
+const C1 = 0.012055E3
+const C2 = 0.2075E3
+const C3 = 91.012E3
+const C4 = 0.0415E3
+const C5 = 87.892E3
+const C6 = 4.3330E3
+const C7 = 214.02E3
 const C = [C1,C2,C3,C4,C5,C6,C7]
 
-#Indices of Refraction for Fused Silica
-const Cfs1 = 0.6961663;
-const Cfs2 = 0.0684043;
-const Cfs3 = 0.4079426;
-const Cfs4 = 0.1162414;
-const Cfs5 = 0.8974794;
-const Cfs6 = 9.896161;
-const Cfs = [Cfs1,Cfs2,Cfs3,Cfs4,Cfs5, Cfs6]
+#Indices of Refraction for Fused Silica 1/nm
+const Cfs1 = 0.6961663E3
+const Cfs2 = 0.0684043E3
+const Cfs3 = 0.4079426E3
+const Cfs4 = 0.1162414E3
+const Cfs5 = 0.8974794E3
+const Cfs6 = 9.896161
+const Cfs = [Cfs1,Cfs2,Cfs3,Cfs4,Cfs5,Cfs6]
 
 # Plasma Ionization Constants
 const a0 = -185.8
@@ -90,26 +91,26 @@ const Power = sqrt(2/pi) * Energy/σ_t   # Max power delivered by pulse
 
 const dt=tmax/(Nt-1)             # Time step
 const points = (-Nt/2:1:Nt/2)
-const t_vec = (-Nt/2:1:Nt/2)*dt  # Iteration of timesteps
+const t_vec = (-Nt/2:1:Nt/2)*dt  # Time grid iterator
 
-const ff=points./tmax
-const ωω=(2*pi)*ff
+const ff=points./tmax            # Frequency grid
+const ωω=(2*pi)*ff               # Angular frequency grid
 
-const λ_tot = 1E9 * c ./ (f + ff)
-const ωω_tot = ω+ωω
+const λ_tot = 1E9 * c ./ (f + ff) # Peak centered Wavelength grid, in nm
+const ωω_tot = ω+ωω               # Peak centered angular frequency grid
 
-const n_tot_0 = 1+ C1 * (C2 * (λ_tot*1E3.^2) ./ (C3 * (λ_tot*1E3.^2) -1) +
-                         C4 * (λ_tot*1E3.^2) ./ (C5 * (λ_tot*1E3.^2) -1) +
-                         C6 * (λ_tot*1E3.^2) ./ (C7 * (λ_tot*1E3.^2) -1))
+const n_tot_0 = 1+ C1 * (C2 * (λ_tot.^2) ./ (C3 * (λ_tot.^2) -1) +
+                         C4 * (λ_tot.^2) ./ (C5 * (λ_tot.^2) -1) +
+                         C6 * (λ_tot.^2) ./ (C7 * (λ_tot.^2) -1))
 
 #= How is this to be translated?
 l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
 l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
 This should do it I believe:=#
 λ_test = minimum(abs.(λ_tot-λ_min))
-const λ1_min = filter(x -> abs.(λ_tot - λ_min) == λ_test, λ_tot)
+const λ1_min = filter(x -> abs(x - λ_min) == λ_test, λ_tot)[1]
 λ_test = minimum(abs.(λ_tot-λ_max))
-const λ1_max = filter(x -> abs.(λ_tot - λ_max) == λ_test, λ_tot)
+const λ1_max = filter(x -> abs(x - λ_max) == λ_test, λ_tot)[1]
 
 const ρ_crit = ω^2*me*ϵ0/ee^2
 const k_Ar   = ceil.(Ui_Ar ./ (hb*ωω))
@@ -208,28 +209,28 @@ end
 
 function calc_compression(width, Cs)
     λ_test = minimum(abs.(λ_tot - 600))
-    λ_begin = filter(x -> abs(x - 600) == λ_test && x > 0, λ_tot)[1]
-    println(λ_begin)
-    λ_test = minimum(abs.(λ_tot - 6000))
-    λ_final = filter(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)[1]
-    println(λ_final)
-    n_fs = sqrt.(1 + Cs[1].*(λ_tot).^2./((λ_tot).^2-Cs[2].^2) +
-                     Cs[3].*(λ_tot).^2./((λ_tot).^2-Cs[4].^2) +
-                     Cs[5].*(λ_tot).^2./((λ_tot).^2-Cs[6].^2))
-    println(mean(n_fs))
-    n_begin = n_fs[find(x->x==λ_begin, λ_tot)][1]
-    n_fs[find(x->x<λ_begin, λ_tot)] = n_begin
-    println(mean(n_fs))
-    n_final = n_fs[find(x->x==λ_final, λ_tot)][1]
-    n_fs[find(x->x>λ_final, λ_tot)] = n_final
-    println(mean(n_fs))
-    n_interp_fs = Spline1D(ωω_tot, n_fs)
-    n_fs_tot = evaluate(n_interp_fs, ωω_tot) #Is this not the same as n_fs??
-    dn_fs_tot = derivative(n_interp_fs, ωω_tot)
-    k_FS=n_fs_tot.*ωω_tot/c
-    k_FS[find(x->x<245,λ_tot)]=maximum(k_FS)
+    λ_begin = λ_tot[findfirst(x -> abs(x - 600) == λ_test & x, λ_tot)]
 
-    k_prime_FS=1./c.*(dn_fs_tot.*ωω_tot+n_fs_tot)
+    λ_test = minimum(abs.(λ_tot - 6000))
+    λ_final = λ_tot[findfirst(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)]
+
+    n_fs = sqrt.(1 + Cs[1]*(λ_tot).^2./((λ_tot).^2-Cs[2]^2) +
+                     Cs[3]*(λ_tot).^2./((λ_tot).^2-Cs[4]^2) +
+                     Cs[5]*(λ_tot).^2./((λ_tot).^2-Cs[6]^2))
+
+    n_begin = n_fs[findfirst(x->x==λ_begin, λ_tot)]
+    n_fs[find(x->x<λ_begin, λ_tot)] = n_begin
+
+    n_final = n_fs[findfirst(x->x==λ_final, λ_tot)]
+    n_fs[find(x->x>λ_final, λ_tot)] = n_final
+
+    spline = Spline1D(ωω_tot, n_fs)
+    n_fs_interpd = evaluate(n_fs_spline, ωω_tot)
+    dn_fs_interpd = derivative(n_fs_spline, ωω_tot)
+    k_FS=n_fs_interpd.*ωω_tot/c
+    k_FS[find(x->x<245,λ_tot)] = maximum(k_FS)
+
+    k_prime_FS=1 / c * (dn_fs_interpd.*ωω_tot+n_fs_interpd)
 
     k0_FS=k_FS[findfirst(x->x==ω,ωω_tot)]
     k1_FS=k_prime_FS[findfirst(x->x==ω,ωω_tot)]
@@ -238,9 +239,8 @@ function calc_compression(width, Cs)
 end
 
 function smooth(values, radius)
-    smoothed_values = zeros(size(values))
-    smoothed_values[1], smoothed_values[end] = values[1], values[end]
-    for i in 2:(length(values) - 1)
+    smoothed_values = zeros(values)
+    for i in eachindex(values)
         temp_radius = minimum([radius, i - 1, length(values) - i])
         smoothed_values[i] = mean(values[(i - temp_radius):(i + temp_radius)])
     end
@@ -249,10 +249,47 @@ end
 
 function steepening(E1, idxp, idxn, γ_2, γ_4, γ_6, γ_8, γ_10, ω_0, dt, dz)
     NL = (γ_2 * abs.(E1)^2 + γ_4 * abs.(E1)^4 + γ_6 * abs.(E1)^6 +
-        γ_8 * abs.(E1)^8 + γ_10 * abs.(E1)^10) * dz
+          γ_8 * abs.(E1)^8 + γ_10 * abs.(E1)^10) * dz
     Temp = NL .* E1
     k1 = (im / ω_0) * ((Temp[idxp] - Temp[idxn])/(2 * dt))
-    E_temp = 0
+    E1 = E1 + (0.5 * k1)
+
+    NL = (γ_2 * abs.(E1)^2 + γ_4 * abs.(E1)^4 + γ_6 * abs.(E1)^6 +
+          γ_8 * abs.(E1)^8 + γ_10 * abs.(E1)^10) * dz
+    Temp = NL .* E1
+    k2 = (im / ω_0) * ((Temp[idxp] - Temp[idxn])/(2 * dt))
+
+    return E1 + k2
+end
+
+function plasma_potential(E,ω,Zeff,Ui)
+    Uh = 13.5984*ee
+    ω_au = 4.1E16
+    γ = ω .* sqrt(2*me*Ui)./(ee*E)
+    Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
+    E0 = Eh * (Ui/Uh) ^ (3/2)
+    A = zeros(γ)
+    β = 2*γ ./ sqrt.(1+gamma1.^2)
+    α = 2.*asinh.(γ) - β
+
+    g=3/(2*γ).*((1+1/(2*γ.^2)).*asinh.(γ)-1/beta)
+    ν0 = Ui / (ħ*ω)
+    ν  = ν0 * (1 + 1/(2*γ.^2))
+    kmin = floor(nu) + 1
+
+    l=0 #????????????????????????????????????
+    m=0 #????????????????????????????????????
+    n⋆ = Zeff * sqrt(Uh/Ui)
+
+    C_nl2 = 2^(2*n⋆) / (n⋆*γ[2*n⋆]*γ[1])
+    f = (2*l+1) * factorial(l+abs(m)) / (2^abs(m)) *
+        factorial(abs(m)) * factorial(l-abs(m))
+
+    for z in Kmin:(Kmin+2)
+        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-nu)) * dawson(sqrt(abs(beta*(z-nu))))
+    end
+
+    potential = ω_au * C_nl2 * f
 end
 
 #=
