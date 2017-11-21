@@ -410,9 +410,8 @@ while z <= zmax && run
     I_max[JJJ+1]         = maximum(abs.(E).^2)
     It_dist[JJJ+1]       = abs.(E).^2
     spectrum_dist[JJJ+1] = abs.(fftshift(fft(fftshift(E)))).^2
-    ΔT_pulsa[JJJ+1]      = calc_duration(E,t)
+    ΔT_pulse[JJJ+1]      = calc_duration(E,t)
     ρ_max[JJJ+1]         = maximum(ρ*1E-6)
-
-    #TODO: Save Intermediate Results
+    #TODO:Save intermediate data
     JJJ += 1
 end
