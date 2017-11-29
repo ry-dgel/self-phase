@@ -1,6 +1,7 @@
 using Revise
 using Dierckx
 using SpecialFunctions
+using Base.Filesystem
 #using Plots
 
 #=
@@ -346,6 +347,32 @@ end
 ██  ██  ██ ██   ██ ██ ██  ██ ██
 ██      ██ ██   ██ ██ ██   ████
 =#
+# Saving/Loading Files
+fname = "$λnm_$Energy_J_$Tfwhm_s"
+if fname ∈ readdir()
+    print("Found data for these parameters, load and continue? (y)/n:")
+    input = readline()
+    if input != "n"
+        cd(fname)
+        #Load Data
+    else
+        print("Overwrite old data? y/(n):")
+        input = readline()
+        if input != "y"
+            i = 2
+            while !(fname*"_($i)" ∈ readdir())
+                i += 1
+            end
+            fname = fname*"_($i)"
+        else
+            rm(fname)
+        end
+        mkdir(fname)
+        cd(fname)
+    end
+end
+fparams = open("params", "w")
+fE = open("E", "w")
 
 #Temporary Flag
 run = false
@@ -406,7 +433,11 @@ while z <= zmax && run
     distance = 100*ZZZ
     dist[1, JJJ+1] = z
 
+    #Saving E-field
+    writecsv(fE, E)
+
     # Calculating Results
+    # TODO: This can all be done after the loop since we're saving all the E data
     I_max[JJJ+1]         = maximum(abs.(E).^2)
     It_dist[JJJ+1]       = abs.(E).^2
     spectrum_dist[JJJ+1] = abs.(fftshift(fft(fftshift(E)))).^2
