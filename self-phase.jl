@@ -2,7 +2,7 @@ using Revise
 using Dierckx
 using SpecialFunctions
 using Base.Filesystem
-#using Plots
+using Plots
 
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
@@ -14,36 +14,39 @@ using Base.Filesystem
 #########################
 # Simulation Parameters #
 #########################
-# Experimental Parameters
-const Energy   = 0.8E-3     # Pulse Energy       J
-const Tfwhm    = 130E-15     # Pulse Width        s
-const Chirp    = 0          # Pulse Chirp        s^2
-const λ        = 800E-9     # Pulse Wavelength   m
 
-const Fiber_D  = 270E-6     # Fiber Diameter     m
-const Fiber_L  = 100E-3     # Fiber Length       m
-const Pressure = 1.4E3      # Capillary Pressure Pa
+p = Dict(
+    # Experimental Parameters
+    "Energy" => 0.8E-3,   # Pulse Energy        J
+    "Tfwhm"  => 130E-15,  # Pulse Width         s
+    #"Chirp"  => 0,        # Pulse Chirp         s^2
+    "λ"      => 800E-9,   # Pulse Wavelength    m
+    # Numeric Parameters
+    "dz0"    => 2E-3,     # z-step 1
+    "dz1"    => 2E-4,     # z-step 2
+    "zmax"   => 0.10,     # Total length to sim m
+    "Nt"     => 2*8192,   # Number of time steps
+    "tmax"   => 1200E-15  # Maximum time
+    )
 
-const TOD      = 0          # 3rd Order Disp.    s^3
-const losses   = 0.13       # Absorption Coef.   1/m
+
+###################
+# Fixed Constants #
+###################
+const Fiber_D  = 270E-6     # Fiber Diameter      m
+#const Fiber_L  = 100E-3     # Fiber Length        m
+const Pressure = 1.4E3      # Capillary Pressure  Pa
+
+const TOD      = 0          # 3rd Order Disp.     s^3
+const losses   = 0.13       # Absorption Coef.    1/m
 
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13
 const Zeff_Ar = 1
 
-# Numeric Parameters
-const dz0=2E-3       # z-step 1
-const dz1=2E-4       # z-step 2
-const zmax = Fiber_L # Total z
+λ_min = 400
+λ_max = 1500
 
-const Nt=2*8192          # Number of time steps
-const tmax=1200E-15      # Maximum time
-
-const λ_min = 400
-const λ_max = 1500
-###################
-# Fixed Constants #
-###################
 # General Physics Constants
 const c  = 299792458        # Speed of light     m/s
 const ħ = 1.0545718E-34     # Reduced Planck     Js
@@ -61,16 +64,16 @@ const C4 = 0.0415E3
 const C5 = 87.892E3
 const C6 = 4.3330E3
 const C7 = 214.02E3
-const C = [C1,C2,C3,C4,C5,C6,C7]
+C = [C1,C2,C3,C4,C5,C6,C7]
 
 #Indices of Refraction for Fused Silica 1/nm
-const Cfs1 = 0.6961663E3
-const Cfs2 = 0.0684043E3
-const Cfs3 = 0.4079426E3
-const Cfs4 = 0.1162414E3
-const Cfs5 = 0.8974794E3
+const Cfs1 = 0.6961663
+const Cfs2 = 0.0684043
+const Cfs3 = 0.4079426
+const Cfs4 = 0.1162414
+const Cfs5 = 0.8974794
 const Cfs6 = 9.896161
-const Cfs = [Cfs1,Cfs2,Cfs3,Cfs4,Cfs5,Cfs6]
+Cfs = [Cfs1,Cfs2,Cfs3,Cfs4,Cfs5,Cfs6]
 
 # Plasma Ionization Constants
 const a0 = -185.8
@@ -81,40 +84,63 @@ const a4 = -9.722e-5
 const a5 =  1.182e-5
 const a6 =  4.63e-7
 const a7 = -4.227e-8
+as = [a0,a1,a2,a3,a4,a5,a6,a7]
 
 #####################
 # Derived Constants #
 #####################
-const f = c/λ                           # Pulse Frequency Hz
-const ω = 2*pi*f                        # Pulse Angular Frequency
-const σ_t = Tfwhm/sqrt(2*log(2))        # 1-sigma width of pulse
-const Power = sqrt(2/pi) * Energy/σ_t   # Max power delivered by pulse
+function derive_constants(p)
+    f      = c / p["λ"]                 # Pulse Frequency Hz
+    ω      = 2*pi*f                       # Pulse Angular Frequency
+    σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
+    Power  = sqrt(2/pi) * p["Energy"]/σ_t # Max power delivered by pulse
 
-const dt=tmax/(Nt-1)             # Time step
-const points = (-Nt/2:1:Nt/2)
-const t_vec = (-Nt/2:1:Nt/2)*dt  # Time grid iterator
+    dt     = p["tmax"]/(p["Nt"]-1)        # Time step
+    points = (-p["Nt"]/2:1:p["Nt"]/2)
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
 
-const ff=points./tmax            # Frequency grid
-const ωω=(2*pi)*ff               # Angular frequency grid
+    ff     = points./p["tmax"]            # Frequency grid
+    ωω     = (2*pi)*ff                    # Angular frequency grid
 
-const λ_tot = 1E9 * c ./ (f + ff) # Peak centered Wavelength grid, in nm
-const ωω_tot = ω+ωω               # Peak centered angular frequency grid
+    # Peak centered Wavelength grid, in nm
+    λ_tot  = 1E9 * c ./ (f + ff)
+    # Peak centered angular frequency grid
+    ωω_tot = ω+ωω
 
-const n_tot_0 = 1+ C1 * (C2 * (λ_tot.^2) ./ (C3 * (λ_tot.^2) -1) +
-                         C4 * (λ_tot.^2) ./ (C5 * (λ_tot.^2) -1) +
-                         C6 * (λ_tot.^2) ./ (C7 * (λ_tot.^2) -1))
+    # Nonlinear index of refraction
+    n_tot_0 = 1 + C1 * (C2 * (λ_tot.^2) ./ (C3 * (λ_tot.^2) -1) +
+                        C4 * (λ_tot.^2) ./ (C5 * (λ_tot.^2) -1) +
+                        C6 * (λ_tot.^2) ./ (C7 * (λ_tot.^2) -1))
 
-#= How is this to be translated?
-l1min=λ_tot(abs(lambda_tot_rouge-lmin)==min(abs(lambda_tot_rouge-lmin)));
-l1max=λ_tot(abs(lambda_tot_rouge-lmax)==min(abs(lambda_tot_rouge-lmax)));
-This should do it I believe:=#
-λ_test = minimum(abs.(λ_tot-λ_min))
-const λ_min = filter(x -> abs(x - λ_min) == λ_test, λ_tot)[1]
-λ_test = minimum(abs.(λ_tot-λ_max))
-const λ_max = filter(x -> abs(x - λ_max) == λ_test, λ_tot)[1]
+    dp = Dict(
+        "f"       => f,
+        "ω"       => ω,
+        "σ_t"     => σ_t,
+        "Power"   => Power,
 
-const ρ_crit = ω^2*me*ϵ0/ee^2
-const k_Ar   = ceil.(Ui_Ar ./ (hb*ωω))
+        "dt"      => dt,
+        "points"  => points,
+        "t_vec"   => t_vec,
+
+        "ff"      => ff,
+        "ωω"      => ωω,
+
+        "λ_tot"   => λ_tot,
+        "ωω_tot"  => ωω_tot,
+
+        "n_tot_0" => n_tot_0
+    )
+    merge!(p,dp)
+end
+derive_constants(p)
+
+λ_test = minimum(abs.(p["λ_tot"]-λ_min))
+λ_min = filter(x -> abs(x - λ_min) == λ_test, p["λ_tot"])[1]
+λ_test = minimum(abs.(p["λ_tot"]-λ_max))
+λ_max = filter(x -> abs(x - λ_max) == λ_test, p["λ_tot"])[1]
+
+const ρ_crit = p["ωω"].^2*me*ϵ0/ee^2
+const k_Ar   = ceil.(Ui_Ar ./ (ħ*p["ωω"]))
 
 #=
 ██    ██  █████  ██████  ██  █████  ██████  ██      ███████ ███████
@@ -127,11 +153,11 @@ const k_Ar   = ceil.(Ui_Ar ./ (hb*ωω))
 # Initialisation #
 ##################
 # Electric Field
-E                 = exp.(-t_vec.^2/σ_t^2)
-E0                = sqrt(2*Power/(pi*Fiber_D^2))
-E                 = E0 .* E
-spectrum_entrance = abs.(fftshift(fft(fftshift(E)))).^2
-I_entrance        = sum(spectrum_entrance)
+E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
+E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
+E             = E0 .* E
+spectrum_init = abs.(fftshift(fft(fftshift(E)))).^2
+I_init        = sum(spectrum_init)
 
 # Propagation variables
 zpoints       = 1000
@@ -139,23 +165,24 @@ dist          = zeros(zpoints)
 ρ_max         = zeros(zpoints)
 I_max         = zeros(zpoints)
 ΔT_pulse      = zeros(zpoints)
-It_dist       = zeros(Nt,zpoints)
-spectrum_dist = zeros(Nt,zpoints)
+It_dist       = zeros(p["Nt"],zpoints)
+spectrum_dist = zeros(p["Nt"],zpoints)
 
-Chirp_function = Chirp * ωω .^ 2 + TOD .* ωω .^ 3
+#Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
+Chirp_function = 0
 E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
 E              = ifftshift(ifft(ifftshift(E_TF)))
 
 #Clear vars
-Chirp_function = nothing; E_TF           = nothing; gc()
+Chirp_function = nothing; E_TF = nothing; gc()
 
 z   = 0
 JJJ = 0
-dz  = dz0
+dz  = p["dz0"]
 ZZZ = 0
 
-idxp = 2:Nt
-idxn = Nt:(Nt-1)
+idxp = 2:p["Nt"]
+idxn = p["Nt"]:(p["Nt"]-1)
 
 pressure = []
 
@@ -166,7 +193,7 @@ pressure = []
 ██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
 ██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
 =#
-function calc_pressure(p_in, p_out, z, zmax)
+function calc_pressure(p_in, p_out, z, zmax) #tested
     #=
     Calculate pressure along fiber
     param p_in:  Pressure at input of fiber
@@ -179,64 +206,70 @@ function calc_pressure(p_in, p_out, z, zmax)
     return sqrt(p_in^2 + (z/zmax) * (p_out^2-p_in^2))
 end
 
-function calc_duration(E, t1)
+function calc_duration(E, t1) #tested
     center_pulse = sum(t1.*(abs.(E)).^2)/sum(abs.(E).^2)
     return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs.(E).^2)
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
-function plasma(dt, α, ρ_at, Potentiel_Ar, E, C2_Ar, Nt)
+function plasma(p, α, ρ_at, Potentiel_Ar, E, C2_Ar) #tested
     #Init
     ρ_Ar = zeros(size(E))
 
-    for i in 1:(Nt-1)
+    for i in 1:(p["Nt"]-1)
         ρ_Ar[i+1] = ρ_Ar[i] +
-                    dt * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
+                    p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
                     (C2_Ar * abs(E[i])^2)*ρ_Ar[i])
     end
     return ρ_Ar
 end
 
-function prop_lin(E, deriv_t_2, dz, losses)
+function prop_lin(E, deriv_t_2, dz, losses) #tested
     # Shift to frequency domain and compute linear propagation
     E_TF = fftshift(fft(fftshift(E))) .* exp.(1im*(deriv_t_2)*dz)
     # Shift back to time domain, compute losses and return
     return ifftshift(ifft(ifftshift(E_TF))).*exp.(-losses/2 * dz)
 end
 
-function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response)
+function prop_non_lin(E, rrr, ρ, dz, losses, kerr_response) #tested
     return E.*exp(rrr*ρ*dz - losses + kerr_response)
 end
 
-function calc_compression(width, Cs)
-    λ_test = minimum(abs.(λ_tot - 600))
-    λ_begin = λ_tot[findfirst(x -> abs(x - 600) == λ_test & x, λ_tot)]
+function calc_compression(p, width, Cs)
+    λ_mu = p["λ_tot"]*1E-3
+    λ_test = minimum(abs.(p["λ_tot"] - 600))
+    λ_begin = p["λ_tot"][findfirst(x -> abs(x - 600) == λ_test && x > 0,
+                                   p["λ_tot"])]
 
-    λ_test = minimum(abs.(λ_tot - 6000))
-    λ_final = λ_tot[findfirst(x -> abs(x - 6000) == λ_test && x > 0, λ_tot)]
+    λ_test = minimum(abs.(p["λ_tot"] - 6000))
+    λ_final = p["λ_tot"][findfirst(x -> abs(x - 6000) == λ_test && x > 0,
+                                   p["λ_tot"])]
+    n_fs = sqrt.(1 + 0im + Cs[1]*(λ_mu).^2./((λ_mu).^2-Cs[2]^2) +
+                           Cs[3]*(λ_mu).^2./((λ_mu).^2-Cs[4]^2) +
+                           Cs[5]*(λ_mu).^2./((λ_mu).^2-Cs[6]^2))
+    return n_fs
+    println(minimum(real.(n_fs)))
+    println(maximum(real.(n_fs)))
 
-    n_fs = sqrt.(1 + Cs[1]*(λ_tot).^2./((λ_tot).^2-Cs[2]^2) +
-                     Cs[3]*(λ_tot).^2./((λ_tot).^2-Cs[4]^2) +
-                     Cs[5]*(λ_tot).^2./((λ_tot).^2-Cs[6]^2))
+    n_begin = n_fs[findfirst(x->x==λ_begin, p["λ_tot"])]
+    n_fs[p["λ_tot"].<λ_begin] = n_begin
 
-    n_begin = n_fs[findfirst(x->x==λ_begin, λ_tot)]
-    n_fs[λ_tot.<λ_begin] = n_begin
+    n_final = n_fs[findfirst(x->x==λ_final, p["λ_tot"])]
+    n_fs[p["λ_tot"].>λ_final] = n_final
 
-    n_final = n_fs[findfirst(x->x==λ_final, λ_tot)]
-    n_fs[λ_tot.>λ_final] = n_final
+    n_fs_spline = Spline1D(p["ωω_tot"], n_fs)
+    n_fs_interpd = evaluate(n_fs_spline, p["ωω_tot"])
 
-    spline = Spline1D(ωω_tot, n_fs)
-    n_fs_interpd = evaluate(n_fs_spline, ωω_tot)
-    dn_fs_interpd = derivative(n_fs_spline, ωω_tot)
-    k_FS=n_fs_interpd.*ωω_tot/c
-    k_FS[find(x->x<245,λ_tot)] = maximum(k_FS)
+    dn_fs_interpd = derivative(n_fs_spline, p["ωω_tot"])
+    k_FS=n_fs_interpd.*p["ωω_tot"]/c
+    k_FS[find(x->x < 245, p["λ_tot"])] = maximum(k_FS)
 
-    k_prime_FS=1 / c * (dn_fs_interpd.*ωω_tot+n_fs_interpd)
+    k_prime_FS=1 / c * (dn_fs_interpd.*p["ωω_tot"]+n_fs_interpd)
 
-    k0_FS=k_FS[findfirst(x->x==ω,ωω_tot)]
-    k1_FS=k_prime_FS[findfirst(x->x==ω,ωω_tot)]
+    k0_FS=k_FS[findfirst(x->x==p["ω"], p["ωω_tot"])]
+    k1_FS=k_prime_FS[findfirst(x->x==p["ω"], p["ωω_tot"])]
 
-    return [(k_FS-k0_FS-k1_FS.*ω).*(w.*1e-3) for w in width]
+    return [(k_FS-k0_FS-k1_FS.*p["ω"]).*(w.*1e-3) for w in width]
 end
 
 function smooth(values, radius)
@@ -249,43 +282,43 @@ function smooth(values, radius)
 end
 
 function steepening(E, idxp, idxn, γs , ω_0, dt, dz)
-    NL = (γ[1] * abs.(E)^2 + γ[2] * abs.(E)^4 + γ[3] * abs.(E)^6 +
-          γ[4] * abs.(E)^8 + γ[5] * abs.(E)^10) * dz
+    NL = (γ[1] * abs.(E).^2 + γ[2] * abs.(E).^4 + γ[3] * abs.(E).^6 +
+          γ[4] * abs.(E).^8 + γ[5] * abs.(E).^10) * dz
     Temp = NL .* E
     k1 = (im / ω_0) * ((Temp[idxp] - Temp[idxn])/(2 * dt))
     E = E + (0.5 * k1)
 
-    NL = (γ[1] * abs.(E)^2 + γ[2] * abs.(E)^4 + γ[3] * abs.(E)^6 +
-          γ[4] * abs.(E)^8 + γ[5] * abs.(E)^10) * dz
+    NL = (γ[1] * abs.(E).^2 + γ[2] * abs.(E).^4 + γ[3] * abs.(E).^6 +
+          γ[4] * abs.(E).^8 + γ[5] * abs.(E).^10) * dz
     Temp = NL .* E
     k2 = (im / ω_0) * ((Temp[idxp] - Temp[idxn])/(2 * dt))
 
     return E + k2
 end
 
-function calc_ks(ωω, λ_tot, ωω_tot, n_tot)
+function calc_ks(p, n_tot)
     # Interpolation of n
-    n_interp = Spline1D(ωω_tot, n_tot)
-    n_tot = evaluate(n_interp, ωω_tot)
-    dn    = derivative(n_interp, ωω_tot, nu=1)
-    d2n   = derivative(n_interp, ωω_tot, nu=2)
-    d3n   = derivative(n_interp, ωω_tot, nu=3)
-    d4n   = derivative(n_interp, ωω_tot, nu=4)
+    n_interp = Spline1D(p["ωω_tot"], n_tot)
+    n_tot = evaluate(n_interp, p["ωω_tot"])
+    dn    = derivative(n_interp, p["ωω_tot"], nu=1)
+    d2n   = derivative(n_interp, p["ωω_tot"], nu=2)
+    d3n   = derivative(n_interp, p["ωω_tot"], nu=3)
+    d4n   = derivative(n_interp, p["ωω_tot"], nu=4)
 
     # Frequency Disperion
-    k_tot = n_tot .* ωω_tot/c
+    k_tot = n_tot .* p["ωω_tot"]/c
     k_tot[λ_tot .< 245] = max(k_tot)
 
-    k_first  = 1/c * (dn .* ωω_tot + n_tot)
-    k_second = 1/c * (d2n .* ωω_tot + 2 * dn)
-    k_third  = 1/c * (d3n .* ωω_tot + 3 * d2n)
-    k_fourth = smooth(1/c * (d4n .* ωω_tot + 4 * d3n), 100)
+    k_first  = 1/c * (dn .* p["ωω_tot"] + n_tot)
+    k_second = 1/c * (d2n .* p["ωω_tot"] + 2 * dn)
+    k_third  = 1/c * (d3n .* p["ωω_tot"] + 3 * d2n)
+    k_fourth = smooth(1/c * (d4n .* p["ωω_tot"] + 4 * d3n), 100)
 
-    k  = k_tot[find_first(x->x==ωω,ωω_tot)]
-    k1 = k_first[find_first(x->x==ωω,ωω_tot)]
-    k2 = k_second[find_first(x->x==ωω,ωω_tot)]
-    k3 = k_third[find_first(x->x==ωω,ωω_tot)]
-    k4 = k_fourth[find_first(x->x==ωω,ωω_tot)]
+    k  = k_tot[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    k1 = k_first[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    k2 = k_second[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    k3 = k_third[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    k4 = k_fourth[find_first(x->x==p["ωω"],p["ωω_tot"])]
     return [k,k1,k2,k3,k4]
 end
 
@@ -326,9 +359,9 @@ function plasma_potential(E,ω,Zeff,Ui)
 
     l=0 #????????????????????????????????????
     m=0 #????????????????????????????????????
-    n⋆ = Zeff * sqrt(Uh/Ui)
+    n_star = Zeff * sqrt(Uh/Ui)
 
-    C_nl2 = 2^(2*n⋆) / (n⋆*γ[2*n⋆]*γ[1])
+    C_nl2 = 2^(2*n_star) / (n_star*γ[2*n_star]*γ[1])
     f = (2*l+1) * factorial(l+abs(m)) / (2^abs(m)) *
         factorial(abs(m)) * factorial(l-abs(m))
 
@@ -348,19 +381,19 @@ end
 ██      ██ ██   ██ ██ ██   ████
 =#
 # Saving/Loading Files
-fname = "$λnm_$Energy_J_$Tfwhm_s"
+fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
 if fname ∈ readdir()
-    print("Found data for these parameters, load and continue? (y)/n:")
+    print("Found data for these parameters, load and continue? (y)/n: ")
     input = readline()
     if input != "n"
         cd(fname)
         #Load Data
     else
-        print("Overwrite old data? y/(n):")
+        print("Overwrite old data? y/(n): ")
         input = readline()
         if input != "y"
             i = 2
-            while !(fname*"_($i)" ∈ readdir())
+            while fname*"_($i)" ∈ readdir()
                 i += 1
             end
             fname = fname*"_($i)"
@@ -368,15 +401,16 @@ if fname ∈ readdir()
             rm(fname)
         end
         mkdir(fname)
-        cd(fname)
     end
 end
-fparams = open("params", "w")
-fE = open("E", "w")
+fparams = open("$fname/params", "w")
+fE = open("$fname/E", "w")
 
 #Temporary Flag
 run = false
-while z <= zmax && run
+if run
+for iter in round(Int, zinit/dz):1:round(Int, zmax/dz)
+    z = iter * dz
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, Pressure, z, zmax)
     push!(pressure, pressure_z)
@@ -389,7 +423,7 @@ while z <= zmax && run
     n_tot[λ_tot .< λ_min] = n_min
 
     ks = calc_ks()
-    n  = n_tot[find_first(x->x==ωω,ωω_tot)]
+    n  = n_tot[find_first(x->x==p["ωω"],p["ωω_tot"])]
     vg = 1/ks[2]
 
     # Argon Parameters
@@ -402,23 +436,23 @@ while z <= zmax && run
 
     # Plasma Parameters
     σ_k = 2.81E-96 * pressure
-    σ   = (k[1]*ee^2) / (ωω * m * ϵ0) * τ/(1+(ωω * τ).^2)
-    β_k = 10^(-4 * k_Ar) * k_Ar * ħ * ωω * ρ * 0.21 * σ_k
+    σ   = (k[1]*ee^2) / (p["ωω"] * m * ϵ0) * τ/(1+(p["ωω"] * τ).^2)
+    β_k = 10^(-4 * k_Ar) * k_Ar * ħ * p["ωω"] * ρ * 0.21 * σ_k
     rrr = -im * k[1]/(2 * n[1]^2 * ρ_crit) - 0.5 * σ
     coeff2 = σ/Ui_Ar
 
     # Dispersion and Laplacian Operators
-    dv_t_2_op = k_tot - k[1] - k[2] * ωω
+    dv_t_2_op = k_tot - k[1] - k[2] * p["ωω"]
 
     # Kerr factors
     γs = im * n[2:end] * k[0]/n[0]
 
     # Propagation
-    E = prop_lin(E, dv_t_2_op, dz, losses)        #Linear
-    E = steepening(E, idxp, idxn, γs, ωω, dt, dz) #Steepening
+    E = prop_lin(Ep["ωω"], dv_t_2_op, dz, losses)        #Linear
+    E = steepening(E, idxp, idxn, γs, p["ωω"], dt, dz) #Steepening
 
     # Plasma
-    U_ion = PPT(abs(E).^2, c, ωω)
+    U_ion = PPT(abs(E).^2, c, p["ωω"])
     ρ = plasma(dt, α, ρ_at, U_ion, E, coeff2, Nt)
     plasma_loss = U_ion / (2 * abs.(E).^2) * Ui_Ar * (ρ_at - ρ) * dz
     plasma_loss[isnan.(plasma_loss)] = 0
@@ -436,13 +470,13 @@ while z <= zmax && run
     #Saving E-field
     writecsv(fE, E)
 
-    # Calculating Results
-    # TODO: This can all be done after the loop since we're saving all the E data
-    I_max[JJJ+1]         = maximum(abs.(E).^2)
-    It_dist[JJJ+1]       = abs.(E).^2
-    spectrum_dist[JJJ+1] = abs.(fftshift(fft(fftshift(E)))).^2
-    ΔT_pulse[JJJ+1]      = calc_duration(E,t)
-    ρ_max[JJJ+1]         = maximum(ρ*1E-6)
+    I_max[iter+1]         = maximum(abs.(E).^2)
+    It_dist[iter+1]       = abs.(E).^2
+    spectrum_dist[iter+1] = abs.(fftshift(fft(fftshift(E)))).^2
+    ΔT_pulse[iter+1]      = calc_duration(E,t)
+    ρ_max[iter+1]         = maximum(ρ*1E-6)
     #TODO:Save intermediate data
-    JJJ += 1
+    if (iter%save_every == 0)
+    end
+end
 end
