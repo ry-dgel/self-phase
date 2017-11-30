@@ -304,27 +304,27 @@ function calc_ks(p, n_tot)
 
     # Frequency Disperion
     k_tot = n_tot .* p["ωω_tot"]/c
-    k_tot[λ_tot .< 245] = max(k_tot)
+    k_tot[p["λ_tot"] .< 245] = max(k_tot)
 
     k_first  = 1/c * (dn .* p["ωω_tot"] + n_tot)
     k_second = 1/c * (d2n .* p["ωω_tot"] + 2 * dn)
     k_third  = 1/c * (d3n .* p["ωω_tot"] + 3 * d2n)
     k_fourth = smooth(1/c * (d4n .* p["ωω_tot"] + 4 * d3n), 100)
 
-    k  = k_tot[find_first(x->x==p["ωω"],p["ωω_tot"])]
-    k1 = k_first[find_first(x->x==p["ωω"],p["ωω_tot"])]
-    k2 = k_second[find_first(x->x==p["ωω"],p["ωω_tot"])]
-    k3 = k_third[find_first(x->x==p["ωω"],p["ωω_tot"])]
-    k4 = k_fourth[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    k  = k_tot[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k1 = k_first[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k2 = k_second[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k3 = k_third[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k4 = k_fourth[findfirst(x->x==p["ωω"],p["ωω_tot"])]
     return [k,k1,k2,k3,k4]
 end
 
 function calc_ns(pressure, n, n_tot, λ_tot)
-    n2_800  = 1e-23   * pression_z
-    n4_800  =-3.7e-42 * pression_z
-    n6_800  = 4e-58   * pression_z
-    n8_800  =-1.7e-75 * pression_z
-    n10_800 = 8.8e-94 * pression_z
+    n2_800  = 1e-23   * pressure
+    n4_800  =-3.7e-42 * pressure
+    n6_800  = 4e-58   * pressure
+    n8_800  =-1.7e-75 * pressure
+    n10_800 = 8.8e-94 * pressure
 
     n_800 = n_tot[abs.(λ_tot - 800) == minimum(abs.(λ_tot-800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
@@ -352,7 +352,7 @@ function plasma_potential(E,ω,Zeff,Ui)
     g=3/(2*γ).*((1+1/(2*γ.^2)).*asinh.(γ)-1/beta)
     ν0 = Ui / (ħ*ω)
     ν  = ν0 * (1 + 1/(2*γ.^2))
-    kmin = floor(nu) + 1
+    kmin = floor(ν) + 1
 
     l=0 #????????????????????????????????????
     m=0 #????????????????????????????????????
@@ -363,10 +363,12 @@ function plasma_potential(E,ω,Zeff,Ui)
         factorial(abs(m)) * factorial(l-abs(m))
 
     for z in Kmin:(Kmin+2)
-        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-nu)) * dawson(sqrt(abs(beta*(z-nu))))
+        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-ν)) * 
+             dawson(sqrt(abs(beta*(z-ν))))
     end
 
-    potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) * A .* (2 * E0/(E .* sqrt.(1+γ.^2))).^(2 * n⋆ - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
+    potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) * 
+                A .* (2 * E0/(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
     potential[isnan.(potential)]=0
 end
 
@@ -407,51 +409,51 @@ fE = open("$fname/E", "w")
 #Temporary Flag
 run = false
 if run
-for iter in round(Int, zinit/p["dz0"]):1:round(Int, zmax/p["dz0"])
+for iter in round(Int, zinit/p["dz0"]):1:round(Int, p["zmax"]/p["dz0"])
     z = iter * p["dz0"]
     # Calculate Pressure
-    pressure_z = calc_pressure(0.008, Pressure, z, zmax)
+    pressure_z = calc_pressure(0.008, Pressure, z, p["zmax"])
     push!(pressure, pressure_z)
 
     # Update of n, with cutoffs
-    n_tot = sqrt(1+pressure_z * (n_tot_0.^2 - 1))
-    n_max = n_tot[findfirst(λ->λ==λ_max, λ_tot)]
-    n_tot[λ_tot .> λ_max] = n_max
-    n_min = n_tot[findfirst(λ->λ==λ_min, λ_tot)]
-    n_tot[λ_tot .< λ_min] = n_min
+    n_tot = sqrt(1+pressure_z * (p["n_tot_0"].^2 - 1))
+    n_max = n_tot[findfirst(λ->λ==λ_max, p["λ_tot"])]
+    n_tot[p["λ_tot"] .> λ_max] = n_max
+    n_min = n_tot[findfirst(λ->λ==λ_min, p["λ_tot"])]
+    n_tot[p["λ_tot"] .< λ_min] = n_min
 
     ks = calc_ks()
-    n  = n_tot[find_first(x->x==p["ωω"],p["ωω_tot"])]
+    n  = n_tot[findfirst(x->x==p["ωω"],p["ωω_tot"])]
     vg = 1/ks[2]
 
     # Argon Parameters
     ns = calc_ns()
-    β2 = pressure_z * k[3]
-    β3 = pressure_z * k[4]
-    β4 = pressure_z * k[5]
+    β2 = pressure_z * ks[3]
+    β3 = pressure_z * ks[4]
+    β4 = pressure_z * ks[5]
     τ = 3.5E-13 / pressure_z
-    ρ_at = pressure_z * 1E5 / (kB * T)
+    ρ_at = pressure_z * 1E5 / (Kb * T)
 
     # Plasma Parameters
     σ_k = 2.81E-96 * pressure
-    σ   = (k[1]*ee^2) / (p["ωω"] * m * ϵ0) * τ/(1+(p["ωω"] * τ).^2)
-    β_k = 10^(-4 * k_Ar) * k_Ar * ħ * p["ωω"] * ρ * 0.21 * σ_k
-    rrr = -im * k[1]/(2 * n[1]^2 * ρ_crit) - 0.5 * σ
+    σ   = (ks[1]*ee^2) / (p["ωω"] * me * ϵ0) * τ/(1+(p["ωω"] * τ).^2)
+    β_k = 10^(-4 * k_Ar) * k_Ar * ħ * p["ωω"] * ρ_at * 0.21 * σ_k
+    rrr = -im * ks[1]/(2 * n[1]^2 * ρ_crit) - 0.5 * σ
     coeff2 = σ/Ui_Ar
 
     # Dispersion and Laplacian Operators
-    dv_t_2_op = k_tot - k[1] - k[2] * p["ωω"]
+    dv_t_2_op = p["k_tot"] - ks[1] - ks[2] * p["ωω"]
 
     # Kerr factors
-    γs = im * n[2:end] * k[0]/n[0]
+    γs = im * n[2:end] * ks[1]/n[1]
 
     # Propagation
-    E = prop_lin(Ep["ωω"], dv_t_2_op, p["dz0"], losses)        #Linear
-    E = steepening(E, idxp, idxn, γs, p["ωω"], dt, p["dz0"]) #Steepening
+    E = prop_lin(p, E, dv_t_2_op, losses)    #Linear
+    E = steepening(p, E, idxp, idxn, γs)     #Steepening
 
     # Plasma
-    U_ion = PPT(abs(E).^2, c, p["ωω"])
-    ρ = plasma(dt, α, ρ_at, U_ion, E, coeff2, Nt)
+    U_ion = plasma_potential(abs(E).^2, c, p["ωω"])
+    ρ = plasma(p, α, ρ_at, U_ion, E, coeff2, )
     plasma_loss = U_ion / (2 * abs.(E).^2) * Ui_Ar * (ρ_at - ρ) * p["dz0"]
     plasma_loss[isnan.(plasma_loss)] = 0
 
