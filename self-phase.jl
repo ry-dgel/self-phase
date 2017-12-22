@@ -57,13 +57,13 @@ const Kb = 1.38064852E-23   # Boltzmann Constant J/K
 const T  = 300              # ~Room Temperature  K
 
 # Indices of refraction/dispersion for Argon 1/nm
-const C1 = 0.012055E3
-const C2 = 0.2075E3
-const C3 = 91.012E3
-const C4 = 0.0415E3
-const C5 = 87.892E3
-const C6 = 4.3330E3
-const C7 = 214.02E3
+const C1 = 0.012055
+const C2 = 0.2075
+const C3 = 91.012
+const C4 = 0.0415
+const C5 = 87.892
+const C6 = 4.3330
+const C7 = 214.02
 C = [C1,C2,C3,C4,C5,C6,C7]
 
 #Indices of Refraction for Fused Silica 1/nm
@@ -104,13 +104,14 @@ function derive_constants(p)
 
     # Peak centered Wavelength grid, in nm
     λ_tot  = 1E9 * c ./ (f + ff)
+    λ_tot_micron = 1E6 * c ./ (f + ff)
     # Peak centered angular frequency grid
     ωω_tot = ω+ωω
 
     # Nonlinear index of refraction
-    n_tot_0 = 1 + C1 * (C2 * (λ_tot.^2) ./ (C3 * (λ_tot.^2) -1) +
-                        C4 * (λ_tot.^2) ./ (C5 * (λ_tot.^2) -1) +
-                        C6 * (λ_tot.^2) ./ (C7 * (λ_tot.^2) -1))
+    n_tot_0 = 1 + C1 * (C2 * (λ_tot_micron.^2) ./ (C3 * (λ_tot_micron.^2) -1) +
+                        C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) -1) +
+                        C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) -1))
 
     dp = Dict(
         "f"       => f,
@@ -181,7 +182,7 @@ JJJ = 0
 ZZZ = 0
 
 idxp = push!(collect(2:p["Nt"]), 1)
-idxn = append!(p["Nt"], collect(1:p["Nt"]-1))
+idxn = append!([p["Nt"]], collect(1:p["Nt"]-1))
 
 pressure = []
 
@@ -234,7 +235,7 @@ function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
     return E.*exp(rrr*ρ*p["dz0"] - losses + kerr_response)
 end
 
-function calc_compression(p, width, Cs)
+function calc_compression(p, width, Cs) #tested
     λ_mu = p["λ_tot"]*1E-3
     λ_test = minimum(abs.(p["λ_tot"] - 600))
     λ_first = p["λ_tot"][findfirst(x -> abs(x - 600) == λ_test && x > 0,
@@ -293,9 +294,9 @@ function steepening(p, E, idxp, idxn, γs)
     return E + k2
 end
 
-function calc_ks(p, n_tot)
+function calc_ks(p, n_tot) #tested
     # Interpolation of n
-    n_interp = Spline1D(p["ωω_tot"], n_tot)
+    n_interp = Spline1D(p["ωω_tot"], n_tot,k=4)
     n_tot = evaluate(n_interp, p["ωω_tot"])
     dn    = derivative(n_interp, p["ωω_tot"], nu=1)
     d2n   = derivative(n_interp, p["ωω_tot"], nu=2)
@@ -304,33 +305,33 @@ function calc_ks(p, n_tot)
 
     # Frequency Disperion
     k_tot = n_tot .* p["ωω_tot"]/c
-    k_tot[p["λ_tot"] .< 245] = max(k_tot)
+    k_tot[p["λ_tot"] .< 245] = maximum(k_tot)
 
     k_first  = 1/c * (dn .* p["ωω_tot"] + n_tot)
     k_second = 1/c * (d2n .* p["ωω_tot"] + 2 * dn)
     k_third  = 1/c * (d3n .* p["ωω_tot"] + 3 * d2n)
     k_fourth = smooth(1/c * (d4n .* p["ωω_tot"] + 4 * d3n), 100)
 
-    k  = k_tot[findfirst(x->x==p["ωω"],p["ωω_tot"])]
-    k1 = k_first[findfirst(x->x==p["ωω"],p["ωω_tot"])]
-    k2 = k_second[findfirst(x->x==p["ωω"],p["ωω_tot"])]
-    k3 = k_third[findfirst(x->x==p["ωω"],p["ωω_tot"])]
-    k4 = k_fourth[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k  = k_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
+    k1 = k_first[findfirst(x->x==p["ω"],p["ωω_tot"])]
+    k2 = k_second[findfirst(x->x==p["ω"],p["ωω_tot"])]
+    k3 = k_third[findfirst(x->x==p["ω"],p["ωω_tot"])]
+    k4 = k_fourth[findfirst(x->x==p["ω"],p["ωω_tot"])]
     return [k,k1,k2,k3,k4]
 end
 
-function calc_ns(pressure, n, n_tot, λ_tot)
+function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n2_800  = 1e-23   * pressure
     n4_800  =-3.7e-42 * pressure
     n6_800  = 4e-58   * pressure
     n8_800  =-1.7e-75 * pressure
     n10_800 = 8.8e-94 * pressure
 
-    n_800 = n_tot[abs.(λ_tot - 800) == minimum(abs.(λ_tot-800))]
+    n_800 = n_tot[findfirst(x->x==minimum(abs.(λ_tot-800)), abs.(λ_tot - 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
-    n4  = n2_800 * ((n^2 - 1)/(n_800^2-1))^6
-    n8  = n2_800 * ((n^2 - 1)/(n_800^2-1))^10
-    n10 = n2_800 * ((n^2 - 1)/(n_800^2-1))^12
+    n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
+    n8  = n8_800 * ((n^2 - 1)/(n_800^2-1))^10
+    n10 = n10_800 * ((n^2 - 1)/(n_800^2-1))^12
 
     return [n,n2,n4,n8,n10]
 end
@@ -363,11 +364,11 @@ function plasma_potential(E,ω,Zeff,Ui)
         factorial(abs(m)) * factorial(l-abs(m))
 
     for z in Kmin:(Kmin+2)
-        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-ν)) * 
+        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-ν)) *
              dawson(sqrt(abs(beta*(z-ν))))
     end
 
-    potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) * 
+    potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) *
                 A .* (2 * E0/(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
     potential[isnan.(potential)]=0
 end
@@ -380,7 +381,7 @@ end
 ██      ██ ██   ██ ██ ██   ████
 =#
 # Saving/Loading Files
-fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
+#=fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
 if fname ∈ readdir()
     print("Found data for these parameters, load and continue? (y)/n: ")
     input = readline()
@@ -479,4 +480,4 @@ for iter in round(Int, zinit/p["dz0"]):1:round(Int, p["zmax"]/p["dz0"])
     if (iter%save_every == 0)
     end
 end
-end
+end=#
