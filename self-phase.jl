@@ -22,8 +22,7 @@ p = Dict(
     #"Chirp"  => 0,        # Pulse Chirp         s^2
     "λ"      => 800E-9,   # Pulse Wavelength    m
     # Numeric Parameters
-    "dz0"    => 2E-3,     # z-step 1
-    "dz1"    => 2E-4,     # z-step 2
+    "dz"    => 2E-3,     # z-step
     "zmax"   => 0.10,     # Total length to sim m
     "Nt"     => 2*8192,   # Number of time steps
     "tmax"   => 1200E-15  # Maximum time
@@ -226,13 +225,13 @@ end
 
 function prop_lin(p, E, deriv_t_2, losses) #tested
     # Shift to frequency domain and compute linear propagation
-    E_TF = fftshift(fft(fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz0"])
+    E_TF = fftshift(fft(fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz"])
     # Shift back to time domain, compute losses and return
-    return ifftshift(ifft(ifftshift(E_TF))).*exp.(-losses/2 * p["dz0"])
+    return ifftshift(ifft(ifftshift(E_TF))).*exp.(-losses/2 * p["dz"])
 end
 
 function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
-    return E.*exp(rrr*ρ*p["dz0"] - losses + kerr_response)
+    return E.*exp(rrr*ρ*p["dz"] - losses + kerr_response)
 end
 
 function calc_compression(p, width, Cs) #tested
@@ -278,20 +277,20 @@ function smooth(values, radius)
     return smoothed_values
 end
 
+#Place this definition inside the next one?
+function NL_response(p, E, idxp, idxn, γs) #Tested, fixed error in matlab
+    #=
+    Functionized version of the repeated code in steppening.m
+    =#
+    NL = sum([γs[i] * abs.(E).^(2*i) for i in eachindex(γs)]) * p["dz"]
+    Temp = NL .* E
+    return (im / p["ω"]) * ((Temp[idxp] - Temp[idxn])/(2 * p["dt"]))
+end
+
 #Make this operate in place?
-function steepening(p, E, idxp, idxn, γs)
-    NL = (γs[1] * abs.(E).^2 + γs[2] * abs.(E).^4 + γs[3] * abs.(E).^6 +
-          γs[4] * abs.(E).^8 + γs[5] * abs.(E).^10) * p["dz"]
-    Temp = NL .* E
-    k1 = (im / p["ω"]) * ((Temp[idxp] - Temp[idxn])/(2 * p["dt"]))
-    E = E + (0.5 * k1)
-
-    NL = (γs[1] * abs.(E).^2 + γs[2] * abs.(E).^4 + γs[3] * abs.(E).^6 +
-          γs[4] * abs.(E).^8 + γs[5] * abs.(E).^10) * p["dz"]
-    Temp = NL .* E
-    k2 = (im / p["ω"]) * ((Temp[idxp] - Temp[idxn])/(2 * p["dt"]))
-
-    return E + k2
+function steepening(p, E, idxp, idxn, γs) #Tested
+    Etemp = E + (0.5 * NL_response(p, E, idxp, idxn, γs))
+    return E + NL_response(p, Etemp, idxp, idxn, γs)
 end
 
 function calc_ks(p, n_tot) #tested
@@ -410,8 +409,8 @@ fE = open("$fname/E", "w")
 #Temporary Flag
 run = false
 if run
-for iter in round(Int, zinit/p["dz0"]):1:round(Int, p["zmax"]/p["dz0"])
-    z = iter * p["dz0"]
+for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
+    z = iter * p["dz"]
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, Pressure, z, p["zmax"])
     push!(pressure, pressure_z)
@@ -455,22 +454,21 @@ for iter in round(Int, zinit/p["dz0"]):1:round(Int, p["zmax"]/p["dz0"])
     # Plasma
     U_ion = plasma_potential(abs(E).^2, c, p["ωω"])
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2, )
-    plasma_loss = U_ion / (2 * abs.(E).^2) * Ui_Ar * (ρ_at - ρ) * p["dz0"]
+    plasma_loss = U_ion / (2 * abs.(E).^2) * Ui_Ar * (ρ_at - ρ) * p["dz"]
     plasma_loss[isnan.(plasma_loss)] = 0
 
     # Kerr and Plasma Propagation (NonLinear)
-    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γ[5].*abs.(E).^10) * p["dz0"]
-    E = prop_non_lin(E, rrr, ρ, p["dz0"], plasma_loss, kerr_response)
+    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γ[5].*abs.(E).^10) * p["dz"]
+    E = prop_non_lin(E, rrr, ρ, p["dz"], plasma_loss, kerr_response)
 
     # Update Distances
-    ZZZ += p["dz0"]
-    z   += p["dz0"]
+    ZZZ += p["dz"]
+    z   += p["dz"]
     distance = 100*ZZZ
     dist[1, JJJ+1] = z
 
     #Saving E-field
     writecsv(fE, E)
-
     I_max[iter+1]         = maximum(abs.(E).^2)
     It_dist[iter+1]       = abs.(E).^2
     spectrum_dist[iter+1] = abs.(fftshift(fft(fftshift(E)))).^2
