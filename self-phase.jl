@@ -406,9 +406,10 @@ fparams = open("$fname/params", "w")
 fE = open("$fname/E", "w")
 =#
 
-#Temporary Flag
-run = false
-if run
+#Temporary Flags
+run_sim = true #Wether to run the simulation
+zinit = 0      #Starting point of the simulation
+if run_sim
 for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     z = iter * p["dz"]
     # Calculate Pressure
@@ -416,18 +417,18 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     push!(pressure, pressure_z)
 
     # Update of n, with cutoffs
-    n_tot = sqrt(1+pressure_z * (p["n_tot_0"].^2 - 1))
+    n_tot = sqrt.(1+pressure_z * (p["n_tot_0"].^2 - 1))
     n_max = n_tot[findfirst(λ->λ==λ_max, p["λ_tot"])]
     n_tot[p["λ_tot"] .> λ_max] = n_max
     n_min = n_tot[findfirst(λ->λ==λ_min, p["λ_tot"])]
     n_tot[p["λ_tot"] .< λ_min] = n_min
 
-    ks = calc_ks()
+    ks = calc_ks(p, n_tot)
     n  = n_tot[findfirst(x->x==p["ωω"],p["ωω_tot"])]
     vg = 1/ks[2]
 
     # Argon Parameters
-    ns = calc_ns()
+    ns = calc_ns(pressure_z, n, n_tot, p["λ_tot"])
     β2 = pressure_z * ks[3]
     β3 = pressure_z * ks[4]
     β4 = pressure_z * ks[5]
