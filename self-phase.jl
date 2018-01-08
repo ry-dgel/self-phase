@@ -211,18 +211,6 @@ function calc_duration(E, t1) #tested
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
-function plasma(p, α, ρ_at, Potentiel_Ar, E, C2_Ar) #tested
-    #Init
-    ρ_Ar = zeros(size(E))
-
-    for i in 1:(p["Nt"]-1)
-        ρ_Ar[i+1] = ρ_Ar[i] +
-                    p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
-                    (C2_Ar * abs(E[i])^2)*ρ_Ar[i])
-    end
-    return ρ_Ar
-end
-
 function prop_lin(p, E, deriv_t_2, losses) #tested
     # Shift to frequency domain and compute linear propagation
     E_TF = fftshift(fft(fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz"])
@@ -335,41 +323,51 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     return [n,n2,n4,n8,n10]
 end
 
-function plasma_potential(E,ω,Zeff,Ui)
+function plasma_potential(E,ω,Zeff,Ui) #Tested
     """
     Derived From PPT Theory
     http://jetp.ac.ru/cgi-bin/dn/e_023_05_0924.pdf
     """
     Uh = 13.5984*ee                     # Hydrogen Ionization Potential
     ω_au = 4.1E16                       # Ionization Potential (1/s Natural)
+    E = abs.(E) * sqrt(2/(ϵ0*c))              # Renomrmalize E-field for proper units
     γ = ω .* sqrt(2*me*Ui)./(ee*E)
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
     A = zeros(γ)
-    β = 2*γ ./ sqrt.(1+gamma1.^2)
+    β = 2*γ ./ sqrt.(1+γ.^2)
     α = 2.*asinh.(γ) - β
 
-    g=3/(2*γ).*((1+1/(2*γ.^2)).*asinh.(γ)-1/beta)
+    g=3./(2*γ).*((1+1./(2*γ.^2)).*asinh.(γ)-1./β)
     ν0 = Ui / (ħ*ω)
-    ν  = ν0 * (1 + 1/(2*γ.^2))
-    kmin = floor(ν) + 1
-
-    l=0 #????????????????????????????????????
-    m=0 #????????????????????????????????????
+    ν  = ν0 * (1 + 1./(2*γ.^2))
+    kmin = minimum(floor.(ν) + 1)
+    l=0
+    m=0 #??Why
     n_star = Zeff * sqrt(Uh/Ui)
 
-    C_nl2 = 2^(2*n_star) / (n_star*γ[2*n_star]*γ[1])
+    C_nl2 = 2^(2*n_star) / (n_star*gamma(2*n_star))
     f = (2*l+1) * factorial(l+abs(m)) / (2^abs(m)) *
         factorial(abs(m)) * factorial(l-abs(m))
 
-    for z in Kmin:(Kmin+2)
-        A += 4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) * exp(-α * (z-ν)) *
-             dawson(sqrt(abs(beta*(z-ν))))
-    end
+    A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
+             dawson.(sqrt.(abs.(β.*(z-ν)))) for z in kmin:kmin+2])
 
     potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) *
-                A .* (2 * E0/(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
-    potential[isnan.(potential)]=0
+                A .* (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
+    #potential[isnan.(potential)]=0
+    return potential
+end
+
+function plasma(p, α, ρ_at, Potentiel_Ar, E, C2_Ar) #tested
+    ρ_Ar = zeros(size(E))
+
+    for i in 1:(p["Nt"]-1)
+        ρ_Ar[i+1] = ρ_Ar[i] +
+                    p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
+                    (C2_Ar * abs(E[i])^2)*ρ_Ar[i])
+    end
+    return ρ_Ar
 end
 
 #=
@@ -380,7 +378,8 @@ end
 ██      ██ ██   ██ ██ ██   ████
 =#
 # Saving/Loading Files
-#=fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
+#=
+fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
 if fname ∈ readdir()
     print("Found data for these parameters, load and continue? (y)/n: ")
     input = readline()
@@ -405,6 +404,7 @@ else
 end
 fparams = open("$fname/params", "w")
 fE = open("$fname/E", "w")
+=#
 
 #Temporary Flag
 run = false
@@ -478,4 +478,4 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     if (iter%save_every == 0)
     end
 end
-end=#
+end
