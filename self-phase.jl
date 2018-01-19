@@ -1,8 +1,8 @@
 using Revise
 using Dierckx
-using SpecialFunctions
+using SpecialFunctions.dawson
 using Base.Filesystem
-using Plots
+#using Plots
 
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
@@ -14,10 +14,11 @@ using Plots
 #########################
 # Simulation Parameters #
 #########################
+save_every = 10
 
 p = Dict(
     # Experimental Parameters
-    "Energy" => 0.8E-3,   # Pulse Energy        J
+    "Energy" => 0.8E-6,   # Pulse Energy        J
     "Tfwhm"  => 130E-15,  # Pulse Width         s
     #"Chirp"  => 0,        # Pulse Chirp         s^2
     "λ"      => 800E-9,   # Pulse Wavelength    m
@@ -96,7 +97,7 @@ function derive_constants(p)
 
     dt     = p["tmax"]/(p["Nt"]-1)        # Time step
     points = (-p["Nt"]/2:1:p["Nt"]/2-1)
-    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2-1)*dt  # Time grid iterator
 
     ff     = points./p["tmax"]            # Frequency grid
     ωω     = (2*pi)*ff                    # Angular frequency grid
@@ -139,8 +140,8 @@ derive_constants(p)
 λ_test = minimum(abs.(p["λ_tot"]-λ_max))
 λ_max = filter(x -> abs(x - λ_max) == λ_test, p["λ_tot"])[1]
 
-const ρ_crit = p["ωω"].^2*me*ϵ0/ee^2
-const k_Ar   = ceil.(Ui_Ar ./ (ħ*p["ωω"]))
+const ρ_crit = p["ω"]^2*me*ϵ0/ee^2
+const k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
 
 #=
 ██    ██  █████  ██████  ██  █████  ██████  ██      ███████ ███████
@@ -219,7 +220,7 @@ function prop_lin(p, E, deriv_t_2, losses) #tested
 end
 
 function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
-    return E.*exp(rrr*ρ*p["dz"] - losses + kerr_response)
+    return E.*exp.(rrr.*ρ*p["dz"] - losses + kerr_response)
 end
 
 function calc_compression(p, width, Cs) #tested
@@ -304,7 +305,7 @@ function calc_ks(p, n_tot) #tested
     k2 = k_second[findfirst(x->x==p["ω"],p["ωω_tot"])]
     k3 = k_third[findfirst(x->x==p["ω"],p["ωω_tot"])]
     k4 = k_fourth[findfirst(x->x==p["ω"],p["ωω_tot"])]
-    return [k,k1,k2,k3,k4]
+    return k_tot, [k,k1,k2,k3,k4]
 end
 
 function calc_ns(pressure, n, n_tot, λ_tot) #tested
@@ -317,21 +318,23 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n_800 = n_tot[findfirst(x->x==minimum(abs.(λ_tot-800)), abs.(λ_tot - 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
     n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
+    n6  = n6_800 * ((n^2 - 1)/(n_800^2-1))^8
     n8  = n8_800 * ((n^2 - 1)/(n_800^2-1))^10
     n10 = n10_800 * ((n^2 - 1)/(n_800^2-1))^12
 
-    return [n,n2,n4,n8,n10]
+    return [n,n2,n4,n6,n8,n10]
 end
 
-function plasma_potential(E,ω,Zeff,Ui) #Tested
+function plasma_potential(E,p,Ui) #Tested
     """
     Derived From PPT Theory
     http://jetp.ac.ru/cgi-bin/dn/e_023_05_0924.pdf
     """
+    Zeff = 1
     Uh = 13.5984*ee                     # Hydrogen Ionization Potential
     ω_au = 4.1E16                       # Ionization Potential (1/s Natural)
     E = abs.(E) * sqrt(2/(ϵ0*c))              # Renomrmalize E-field for proper units
-    γ = ω .* sqrt(2*me*Ui)./(ee*E)
+    γ = p["ω"] .* sqrt(2*me*Ui)./(ee*E)
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
     A = zeros(γ)
@@ -339,7 +342,7 @@ function plasma_potential(E,ω,Zeff,Ui) #Tested
     α = 2.*asinh.(γ) - β
 
     g=3./(2*γ).*((1+1./(2*γ.^2)).*asinh.(γ)-1./β)
-    ν0 = Ui / (ħ*ω)
+    ν0 = Ui / (ħ*p["ω"])
     ν  = ν0 * (1 + 1./(2*γ.^2))
     kmin = minimum(floor.(ν) + 1)
     l=0
@@ -351,7 +354,7 @@ function plasma_potential(E,ω,Zeff,Ui) #Tested
         factorial(abs(m)) * factorial(l-abs(m))
 
     A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
-             dawson.(sqrt.(abs.(β.*(z-ν)))) for z in kmin:kmin+2])
+             dawson.(sqrt.(complex(abs.(β.*(z-ν))))) for z in kmin:kmin+2])
 
     potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) *
                 A .* (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
@@ -359,13 +362,16 @@ function plasma_potential(E,ω,Zeff,Ui) #Tested
     return potential
 end
 
-function plasma(p, α, ρ_at, Potentiel_Ar, E, C2_Ar) #tested
+function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
-
+    println("In Plasma, ", E[7620])
     for i in 1:(p["Nt"]-1)
+        if i == 7620
+            println(ρ_Ar[i])
+        end
         ρ_Ar[i+1] = ρ_Ar[i] +
                     p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
-                    (C2_Ar * abs(E[i])^2)*ρ_Ar[i])
+                    (coeff2 * abs(E[i])^2)*ρ_Ar[i])
     end
     return ρ_Ar
 end
@@ -411,20 +417,21 @@ run_sim = true #Wether to run the simulation
 zinit = 0      #Starting point of the simulation
 if run_sim
 for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
+    println("Start, ", E[1])
     z = iter * p["dz"]
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, Pressure, z, p["zmax"])
     push!(pressure, pressure_z)
 
     # Update of n, with cutoffs
-    n_tot = sqrt.(1+pressure_z * (p["n_tot_0"].^2 - 1))
+    n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
     n_max = n_tot[findfirst(λ->λ==λ_max, p["λ_tot"])]
     n_tot[p["λ_tot"] .> λ_max] = n_max
     n_min = n_tot[findfirst(λ->λ==λ_min, p["λ_tot"])]
     n_tot[p["λ_tot"] .< λ_min] = n_min
 
-    ks = calc_ks(p, n_tot)
-    n  = n_tot[findfirst(x->x==p["ωω"],p["ωω_tot"])]
+    k_tot, ks = calc_ks(p, n_tot)
+    n  = n_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
     vg = 1/ks[2]
 
     # Argon Parameters
@@ -436,47 +443,53 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     ρ_at = pressure_z * 1E5 / (Kb * T)
 
     # Plasma Parameters
-    σ_k = 2.81E-96 * pressure
-    σ   = (ks[1]*ee^2) / (p["ωω"] * me * ϵ0) * τ/(1+(p["ωω"] * τ).^2)
-    β_k = 10^(-4 * k_Ar) * k_Ar * ħ * p["ωω"] * ρ_at * 0.21 * σ_k
-    rrr = -im * ks[1]/(2 * n[1]^2 * ρ_crit) - 0.5 * σ
+    σ_k = 2.81E-96 * Pressure
+    σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
+    β_k = 10.^(-4 * k_Ar) .* k_Ar * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
+    rrr = -im * ks[1]./(2 * n[1]^2 * ρ_crit) - 0.5 * σ
     coeff2 = σ/Ui_Ar
 
     # Dispersion and Laplacian Operators
-    dv_t_2_op = p["k_tot"] - ks[1] - ks[2] * p["ωω"]
+    dv_t_2_op = k_tot - ks[1] - ks[2] * p["ωω"]
 
     # Kerr factors
-    γs = im * n[2:end] * ks[1]/n[1]
+    γs = im * ns[2:end] * ks[1]/n[1]
 
     # Propagation
     E = prop_lin(p, E, dv_t_2_op, losses)    #Linear
+    println("Linear, ", E[1])
     E = steepening(p, E, idxp, idxn, γs)     #Steepening
+    println("Steep, ", E[1])
 
     # Plasma
-    U_ion = plasma_potential(abs(E).^2, c, p["ωω"])
-    ρ = plasma(p, α, ρ_at, U_ion, E, coeff2, )
-    plasma_loss = U_ion / (2 * abs.(E).^2) * Ui_Ar * (ρ_at - ρ) * p["dz"]
+    println(E[1])
+    U_ion = plasma_potential(E, p, Ui_Ar)
+    println("Blag", E[1])
+    if iter==8
+        @enter plasma(p, α, ρ_at, U_ion, E, coeff2)
+    end
+    ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
+    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
     plasma_loss[isnan.(plasma_loss)] = 0
 
     # Kerr and Plasma Propagation (NonLinear)
-    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γ[5].*abs.(E).^10) * p["dz"]
-    E = prop_non_lin(E, rrr, ρ, p["dz"], plasma_loss, kerr_response)
-
+    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
+    E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
+    println("nonlin", E[1])
     # Update Distances
     ZZZ += p["dz"]
     z   += p["dz"]
     distance = 100*ZZZ
     dist[1, JJJ+1] = z
 
-    #Saving E-field
-    writecsv(fE, E)
     I_max[iter+1]         = maximum(abs.(E).^2)
-    It_dist[iter+1]       = abs.(E).^2
-    spectrum_dist[iter+1] = abs.(fftshift(fft(fftshift(E)))).^2
-    ΔT_pulse[iter+1]      = calc_duration(E,t)
+    It_dist[:, iter+1]    = abs.(E).^2
+    spectrum_dist[:, iter+1] = abs.(fftshift(fft(fftshift(E[:])))).^2
+    ΔT_pulse[iter+1]      = calc_duration(E,p["t_vec"]*p["dt"])
     ρ_max[iter+1]         = maximum(ρ*1E-6)
     #TODO:Save intermediate data
     if (iter%save_every == 0)
+    abs.(E).^2, c, p["ωω"]
     end
 end
 end
