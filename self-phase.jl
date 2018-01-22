@@ -2,6 +2,7 @@ using Revise
 using Dierckx
 using SpecialFunctions.dawson
 using Base.Filesystem
+using ProgressMeter
 #using Plots
 
 #=
@@ -364,11 +365,7 @@ end
 
 function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
-    println("In Plasma, ", E[7620])
     for i in 1:(p["Nt"]-1)
-        if i == 7620
-            println(ρ_Ar[i])
-        end
         ρ_Ar[i+1] = ρ_Ar[i] +
                     p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
                     (coeff2 * abs(E[i])^2)*ρ_Ar[i])
@@ -415,9 +412,13 @@ fE = open("$fname/E", "w")
 #Temporary Flags
 run_sim = true #Wether to run the simulation
 zinit = 0      #Starting point of the simulation
+
+#Setting up progress meter
+steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
+prog = Progress(steps, 0.1)
+
 if run_sim
 for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
-    println("Start, ", E[1])
     z = iter * p["dz"]
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, Pressure, z, p["zmax"])
@@ -457,17 +458,10 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
 
     # Propagation
     E = prop_lin(p, E, dv_t_2_op, losses)    #Linear
-    println("Linear, ", E[1])
     E = steepening(p, E, idxp, idxn, γs)     #Steepening
-    println("Steep, ", E[1])
 
     # Plasma
-    println(E[1])
     U_ion = plasma_potential(E, p, Ui_Ar)
-    println("Blag", E[1])
-    if iter==8
-        @enter plasma(p, α, ρ_at, U_ion, E, coeff2)
-    end
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
     plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
     plasma_loss[isnan.(plasma_loss)] = 0
@@ -475,7 +469,6 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     # Kerr and Plasma Propagation (NonLinear)
     kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
-    println("nonlin", E[1])
     # Update Distances
     ZZZ += p["dz"]
     z   += p["dz"]
@@ -491,5 +484,6 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     if (iter%save_every == 0)
     abs.(E).^2, c, p["ωω"]
     end
+    ProgressMeter.next!(prog, showvalues=[(:iter, iter),(:ρ, maximum(ρ))])
 end
 end
