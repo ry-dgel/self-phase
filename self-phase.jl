@@ -23,7 +23,7 @@ save_every = 10
 ###################
 const Fiber_D  = 270E-6     # Fiber Diameter      m
 #const Fiber_L  = 100E-3     # Fiber Length        m
-const Pressure = 1.4E3      # Capillary Pressure  Pa
+const Pressure = 1.4      # Capillary Pressure  Pa
 
 const TOD      = 0          # 3rd Order Disp.     s^3
 const losses   = 0.13       # Absorption Coef.    1/m
@@ -346,8 +346,11 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
-function saveData(fname, E, ΔT_pulse, ρ_max, z)
-    writecsv(fname * "/E", E)
+function saveData(fname, E, ρ_max, ΔT_pulse, z)
+    open(fname * "/E", "a") do f
+        writecsv(f, zip(real(E),imag(E)))
+        write(f, "\n")
+    end
     open(fname * "/ΔT", "a") do f
         write(f, "$(ΔT_pulse)\n")
     end
@@ -423,6 +426,10 @@ run_sim = true #Wether to run the simulation
 k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
 idxp = push!(collect(2:p["Nt"]), 1)
 idxn = append!([p["Nt"]], collect(1:p["Nt"]-1))
+λ_test = minimum(abs.(p["λ_tot"]-λ_min))
+λ_min = filter(x -> abs(x - λ_min) == λ_test, p["λ_tot"])[1]
+λ_test = minimum(abs.(p["λ_tot"]-λ_max))
+λ_max = filter(x -> abs(x - λ_max) == λ_test, p["λ_tot"])[1]
 
 #Setting up progress meter
 steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
@@ -490,8 +497,14 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     dist[1, JJJ+1] = z
 
     if (iter%save_every == 0)
-        saveData(E, maximum(ρ*1E-6), calc_duration(E,p["t_vec"]*p["dt"]), z)
+        saveData(fname, E, maximum(ρ*1E-6),
+                 calc_duration(E,p["t_vec"]*p["dt"]), z)
     end
-    ProgressMeter.next!(prog, showvalues=[(:iter, iter),(:ρ, maximum(ρ))])
+    
+    if maximum(ρ*1E-6) > 1E3
+        print("You exploded the fiber!")
+        break
+    end
+    ProgressMeter.next!(prog, showvalues=[(:iter, iter),(:ρ, maximum(ρ*1E-6))])
 end
 end
