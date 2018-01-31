@@ -3,6 +3,7 @@ using Dierckx
 using SpecialFunctions.dawson
 using Base.Filesystem
 using ProgressMeter
+using YAML
 #using Plots
 
 #=
@@ -16,20 +17,6 @@ using ProgressMeter
 # Simulation Parameters #
 #########################
 save_every = 10
-
-p = Dict(
-    # Experimental Parameters
-    "Energy" => 0.8E-6,   # Pulse Energy        J
-    "Tfwhm"  => 130E-15,  # Pulse Width         s
-    #"Chirp"  => 0,        # Pulse Chirp         s^2
-    "λ"      => 800E-9,   # Pulse Wavelength    m
-    # Numeric Parameters
-    "dz"    => 2E-3,     # z-step
-    "zmax"   => 0.10,     # Total length to sim m
-    "Nt"     => 2*8192,   # Number of time steps
-    "tmax"   => 1200E-15  # Maximum time
-    )
-
 
 ###################
 # Fixed Constants #
@@ -134,15 +121,6 @@ function derive_constants(p)
     )
     merge!(p,dp)
 end
-derive_constants(p)
-
-λ_test = minimum(abs.(p["λ_tot"]-λ_min))
-λ_min = filter(x -> abs(x - λ_min) == λ_test, p["λ_tot"])[1]
-λ_test = minimum(abs.(p["λ_tot"]-λ_max))
-λ_max = filter(x -> abs(x - λ_max) == λ_test, p["λ_tot"])[1]
-
-const ρ_crit = p["ω"]^2*me*ϵ0/ee^2
-const k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
 
 #=
 ██    ██  █████  ██████  ██  █████  ██████  ██      ███████ ███████
@@ -154,36 +132,15 @@ const k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
 ##################
 # Initialisation #
 ##################
-# Electric Field
-E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
-E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
-E             = E0 .* E
-spectrum_init = abs.(fftshift(fft(fftshift(E)))).^2
-I_init        = sum(spectrum_init)
-
 # Propagation variables
 zpoints       = 1000
 dist          = zeros(zpoints)
 ρ_max         = zeros(zpoints)
-I_max         = zeros(zpoints)
 ΔT_pulse      = zeros(zpoints)
-It_dist       = zeros(p["Nt"],zpoints)
-spectrum_dist = zeros(p["Nt"],zpoints)
-
-#Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
-Chirp_function = 0
-E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
-E              = ifftshift(ifft(ifftshift(E_TF)))
-
-#Clear vars
-Chirp_function = nothing; E_TF = nothing; gc()
 
 z   = 0
 JJJ = 0
 ZZZ = 0
-
-idxp = push!(collect(2:p["Nt"]), 1)
-idxn = append!([p["Nt"]], collect(1:p["Nt"]-1))
 
 pressure = []
 
@@ -194,6 +151,20 @@ pressure = []
 ██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
 ██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
 =#
+function initField(p)
+    E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
+    E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
+    E             = E0 .* E
+
+    #Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
+    #Chirp_function = 0
+    #E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
+    #E              = ifftshift(ifft(ifftshift(E_TF)))
+
+    #Clear vars
+    #Chirp_function = nothing; E_TF = nothing; gc()
+end
+
 function calc_pressure(p_in, p_out, z, zmax) #tested
     #=
     Calculate pressure along fiber
@@ -223,7 +194,7 @@ end
 function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
     return E.*exp.(rrr.*ρ*p["dz"] - losses + kerr_response)
 end
-
+#=
 function calc_compression(p, width, Cs) #tested
     λ_mu = p["λ_tot"]*1E-3
     λ_test = minimum(abs.(p["λ_tot"] - 600))
@@ -256,7 +227,7 @@ function calc_compression(p, width, Cs) #tested
     k1_FS=k_prime_FS[findfirst(x->x==p["ω"], p["ωω_tot"])]
 
     return [(k_FS-k0_FS-k1_FS.*p["ωω"]).*(w.*1e-3) for w in width]
-end
+end =#
 
 function smooth(values, radius)
     smoothed_values = zeros(values)
@@ -334,7 +305,7 @@ function plasma_potential(E,p,Ui) #Tested
     Zeff = 1
     Uh = 13.5984*ee                     # Hydrogen Ionization Potential
     ω_au = 4.1E16                       # Ionization Potential (1/s Natural)
-    E = abs.(E) * sqrt(2/(ϵ0*c))              # Renomrmalize E-field for proper units
+    E = abs.(E) * sqrt(2/(ϵ0*c))        # Renomrmalize E-field for proper units
     γ = p["ω"] .* sqrt(2*me*Ui)./(ee*E)
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
@@ -357,8 +328,10 @@ function plasma_potential(E,p,Ui) #Tested
     A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
              dawson.(sqrt.(complex(abs.(β.*(z-ν))))) for z in kmin:kmin+2])
 
-    potential = ω_au * C_nl2 * f * sqrt(6/π) * (Ui / (2 * Uh)) *
-                A .* (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .* exp.(-2 * E0 * g ./ (3*E))
+    potential = ω_au * C_nl2 * f * sqrt(6/π) *
+                (Ui / (2 * Uh)) * A .*
+                (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
+                exp.(-2 * E0 * g ./ (3*E))
     #potential[isnan.(potential)]=0
     return potential
 end
@@ -373,6 +346,37 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
+function saveData(fname, E, ΔT_pulse, ρ_max, z)
+    writecsv(fname * "/E", E)
+    open(fname * "/ΔT", "a") do f
+        write(f, "$(ΔT_pulse)\n")
+    end
+    open(fname * "/ρ", "a") do f
+        write(f, "$(ρ_max)\n")
+    end
+    open(fname * "/z", "w") do f
+        write(f, "$z\n")
+    end
+end
+
+function loadParams(fname)
+    p = YAML.load(open(fname))
+    if haskey(p, "lambda")
+        merge!(p, Dict("λ" => pop!(p, "lambda")))
+    end
+    derive_constants(p)
+    return p
+end
+
+function saveParams(fname, p)
+    open("$fname/params", "w") do f
+        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax"]
+            write(f, "$key:    $(get(p,key,"0000"))\n")
+        end
+    end
+end
+
+
 #=
 ███    ███  █████  ██ ███    ██
 ████  ████ ██   ██ ██ ████   ██
@@ -381,13 +385,15 @@ end
 ██      ██ ██   ██ ██ ██   ████
 =#
 # Saving/Loading Files
-#=
-fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s"
+p = loadParams(ARGS[1]) #Read params from filename passed to command
+fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s_$(p["zmax"])m"
+zinit = 0
 if fname ∈ readdir()
     print("Found data for these parameters, load and continue? (y)/n: ")
     input = readline()
     if input != "n"
-        #Load Data
+        zinit = float(read("$fname/z"))
+        E[:] = readcsv("$fname/E")[end][:]
     else
         print("Overwrite old data? y/(n): ")
         input = readline()
@@ -398,20 +404,25 @@ if fname ∈ readdir()
             end
             fname = fname*"_($i)"
         else
-            rm(fname)
+            rm(fname, recursive=true)
         end
         mkdir(fname)
+        E = initField(p)
+        saveParams(fname, p)
     end
 else
     mkdir(fname)
+    E = initField(p)
+    saveParams(fname, p)
 end
-fparams = open("$fname/params", "w")
-fE = open("$fname/E", "w")
-=#
-
 #Temporary Flags
 run_sim = true #Wether to run the simulation
-zinit = 0      #Starting point of the simulation
+
+#Computed Values used once... Maybe put in derived constants?
+ρ_crit = p["ω"]^2*me*ϵ0/ee^2
+k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
+idxp = push!(collect(2:p["Nt"]), 1)
+idxn = append!([p["Nt"]], collect(1:p["Nt"]-1))
 
 #Setting up progress meter
 steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
@@ -467,22 +478,19 @@ for iter in round(Int, zinit/p["dz"]):1:round(Int, p["zmax"]/p["dz"])
     plasma_loss[isnan.(plasma_loss)] = 0
 
     # Kerr and Plasma Propagation (NonLinear)
-    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3] * abs.(E).^6 + γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
+    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3]
+                    * abs.(E).^6 +
+                    γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
+
     # Update Distances
     ZZZ += p["dz"]
     z   += p["dz"]
     distance = 100*ZZZ
     dist[1, JJJ+1] = z
 
-    I_max[iter+1]         = maximum(abs.(E).^2)
-    It_dist[:, iter+1]    = abs.(E).^2
-    spectrum_dist[:, iter+1] = abs.(fftshift(fft(fftshift(E[:])))).^2
-    ΔT_pulse[iter+1]      = calc_duration(E,p["t_vec"]*p["dt"])
-    ρ_max[iter+1]         = maximum(ρ*1E-6)
-    #TODO:Save intermediate data
     if (iter%save_every == 0)
-    abs.(E).^2, c, p["ωω"]
+        saveData(E, maximum(ρ*1E-6), calc_duration(E,p["t_vec"]*p["dt"]), z)
     end
     ProgressMeter.next!(prog, showvalues=[(:iter, iter),(:ρ, maximum(ρ))])
 end

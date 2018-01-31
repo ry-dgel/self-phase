@@ -1,0 +1,7 @@
+Energy:     0.8E-6
+Tfwhm:      130E-15
+lambda:     800E-9
+dz:         2E-3
+zmax:       0.10
+Nt:         16384
+tmax:       1200E-15
