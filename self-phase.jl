@@ -106,10 +106,8 @@ function derive_constants(p)
 
     λ_min = 400
     λ_max = 1500
-    λ_test = minimum(abs.(λ_tot-λ_min))
-    λ_min = filter(x -> abs(x - λ_min) == λ_test, λ_tot)[1]
-    λ_test = minimum(abs.(λ_tot-λ_max))
-    λ_max = filter(x -> abs(x - λ_max) == λ_test, λ_tot)[1]
+    λ_min = λ_tot[indmin(abs.(λ_tot-λ_min))]
+    λ_max = λ_tot[indmin(abs.(λ_tot-λ_max))]
 
     ρ_crit = ω^2*me*ϵ0/ee^2
     k_Ar   = ceil(Ui_Ar / (ħ*ω))
@@ -150,7 +148,7 @@ function initField(p)
 
     #Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
     #Chirp_function = 0
-    #E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
+	#E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
     #E              = ifftshift(ifft(ifftshift(E_TF)))
 
     #Clear vars
@@ -235,8 +233,8 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n6_800  = 4e-58   * pressure
     n8_800  =-1.7e-75 * pressure
     n10_800 = 8.8e-94 * pressure
-
-    n_800 = n_tot[findfirst(x->x==minimum(abs.(λ_tot-800)), abs.(λ_tot - 800))]
+    
+    n_800 = n_tot[indmin(abs.(λ_tot - 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
     n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
     n6  = n6_800 * ((n^2 - 1)/(n_800^2-1))^8
