@@ -193,7 +193,7 @@ function NL_response(p, E, γs)
     NL = sum([γs[i] * abs.(E).^(2*i) for i in eachindex(γs)]) * p["dz"]
     Temp = NL .* E
     return (im / p["ω"]) *
-           ((circshift(Temp,1) - circshift(Temp,-1)/(2 * p["dt"])))
+           ((circshift(Temp,1) - circshift(Temp,-1))/(2 * p["dt"]))
 end
 
 function steepening(p, E, γs) #Tested
