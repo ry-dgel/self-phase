@@ -5,3 +5,4 @@ dz:         2E-3
 zmax:       0.5
 Nt:         16384
 tmax:       1200E-15
+pressure:   1.4

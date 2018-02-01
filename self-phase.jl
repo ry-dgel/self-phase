@@ -21,10 +21,8 @@ save_every = 25
 # Fixed Constants #
 ###################
 const Fiber_D  = 270E-6     # Fiber Diameter      m
-#const Fiber_L  = 100E-3     # Fiber Length        m
-const Pressure = 1.4      # Capillary Pressure  Pa
+#const Fiber_L  = 100E-3    # Fiber Length       m
 
-const TOD      = 0          # 3rd Order Disp.     s^3
 const losses   = 0.13       # Absorption Coef.    1/m
 
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
@@ -70,9 +68,16 @@ const a6 =  4.63e-7
 const a7 = -4.227e-8
 as = [a0,a1,a2,a3,a4,a5,a6,a7]
 
-#####################
-# Derived Constants #
-#####################
+#=
+███████ ██    ██ ███    ██  ██████ ████████ ██  ██████  ███    ██ ███████
+██      ██    ██ ████   ██ ██         ██    ██ ██    ██ ████   ██ ██
+█████   ██    ██ ██ ██  ██ ██         ██    ██ ██    ██ ██ ██  ██ ███████
+██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
+██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
+=#
+#######################
+# Handling Parameters #
+#######################
 function derive_constants(p)
     f      = c / p["λ"]                 # Pulse Frequency Hz
     ω      = 2*pi*f                       # Pulse Angular Frequency
@@ -97,6 +102,16 @@ function derive_constants(p)
                         C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) -1) +
                         C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) -1))
 
+    λ_min = 400
+    λ_max = 1500
+    λ_test = minimum(abs.(λ_tot-λ_min))
+    λ_min = filter(x -> abs(x - λ_min) == λ_test, λ_tot)[1]
+    λ_test = minimum(abs.(λ_tot-λ_max))
+    λ_max = filter(x -> abs(x - λ_max) == λ_test, λ_tot)[1]
+
+    ρ_crit = ω^2*me*ϵ0/ee^2
+    k_Ar   = ceil(Ui_Ar / (ħ*ω))
+
     dp = Dict(
         "f"       => f,
         "ω"       => ω,
@@ -112,19 +127,20 @@ function derive_constants(p)
 
         "λ_tot"   => λ_tot,
         "ωω_tot"  => ωω_tot,
+        "λ_max"   => λ_max,
+        "λ_min"   => λ_min,
 
-        "n_tot_0" => n_tot_0
+        "n_tot_0" => n_tot_0,
+
+        "ρ_crit"  => ρ_crit,
+        "k_Ar"    => k_Ar
     )
     merge!(p,dp)
 end
 
-#=
-███████ ██    ██ ███    ██  ██████ ████████ ██  ██████  ███    ██ ███████
-██      ██    ██ ████   ██ ██         ██    ██ ██    ██ ████   ██ ██
-█████   ██    ██ ██ ██  ██ ██         ██    ██ ██    ██ ██ ██  ██ ███████
-██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
-██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
-=#
+##############
+# Simulation #
+##############
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
     E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
@@ -140,21 +156,13 @@ function initField(p)
 end
 
 function calc_pressure(p_in, p_out, z, zmax) #tested
-    #=
-    Calculate pressure along fiber
-    param p_in:  Pressure at input of fiber
-    param p_out: Pressure at exit of fiber
-    param z:     Position to calculate pressure at
-    param zmax:  Length of fiber
-
-    return: Pressure at z
-    =#
+    #Calculate pressure along fiber
     return sqrt(p_in^2 + (z/zmax) * (p_out^2-p_in^2))
 end
 
 function calc_duration(E, t1) #tested
-    center_pulse = sum(t1.*(abs.(E)).^2)/sum(abs.(E).^2)
-    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs.(E).^2)
+    center_pulse = sum(t1.*(abs2.(E)))/sum(abs2.(E))
+    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs2.(E))
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
@@ -168,40 +176,6 @@ end
 function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
     return E.*exp.(rrr.*ρ*p["dz"] - losses + kerr_response)
 end
-#=
-function calc_compression(p, width, Cs) #tested
-    λ_mu = p["λ_tot"]*1E-3
-    λ_test = minimum(abs.(p["λ_tot"] - 600))
-    λ_first = p["λ_tot"][findfirst(x -> abs(x - 600) == λ_test && x > 0,
-                                   p["λ_tot"])]
-
-    λ_test = minimum(abs.(p["λ_tot"] - 6000))
-    λ_final = p["λ_tot"][findfirst(x -> abs(x - 6000) == λ_test && x > 0,
-                                   p["λ_tot"])]
-    n_fs = sqrt.(1 + 0im + Cs[1]*(λ_mu).^2./((λ_mu).^2-Cs[2]^2) +
-                           Cs[3]*(λ_mu).^2./((λ_mu).^2-Cs[4]^2) +
-                           Cs[5]*(λ_mu).^2./((λ_mu).^2-Cs[6]^2))
-
-    n_begin = n_fs[findfirst(x->x==λ_first, p["λ_tot"])]
-    n_fs[p["λ_tot"].<600] = n_begin
-
-    n_final = n_fs[findfirst(x->x==λ_final, p["λ_tot"])]
-    n_fs[p["λ_tot"].>6000] = n_final
-
-    n_fs_spline = Spline1D(p["ωω_tot"], n_fs)
-    n_fs_interpd = evaluate(n_fs_spline, p["ωω_tot"])
-    dn_fs_interpd = derivative(n_fs_spline, p["ωω_tot"])
-
-    k_FS=n_fs_interpd.*p["ωω_tot"]/c
-    k_FS[find(x->x < 245, p["λ_tot"])] = maximum(k_FS)
-
-    k_prime_FS=1 / c * (dn_fs_interpd.*p["ωω_tot"]+n_fs_interpd)
-
-    k0_FS=k_FS[findfirst(x->x==p["ω"], p["ωω_tot"])]
-    k1_FS=k_prime_FS[findfirst(x->x==p["ω"], p["ωω_tot"])]
-
-    return [(k_FS-k0_FS-k1_FS.*p["ωω"]).*(w.*1e-3) for w in width]
-end =#
 
 function smooth(values, radius)
     smoothed_values = zeros(values)
@@ -212,20 +186,19 @@ function smooth(values, radius)
     return smoothed_values
 end
 
-#Place this definition inside the next one?
-function NL_response(p, E, idxp, idxn, γs) #Tested, fixed error in matlab
+function NL_response(p, E, γs)
     #=
     Functionized version of the repeated code in steppening.m
     =#
     NL = sum([γs[i] * abs.(E).^(2*i) for i in eachindex(γs)]) * p["dz"]
     Temp = NL .* E
-    return (im / p["ω"]) * ((Temp[idxp] - Temp[idxn])/(2 * p["dt"]))
+    return (im / p["ω"]) *
+           ((circshift(Temp,1) - circshift(Temp,-1)/(2 * p["dt"])))
 end
 
-#Make this operate in place?
-function steepening(p, E, idxp, idxn, γs) #Tested
-    Etemp = E + (0.5 * NL_response(p, E, idxp, idxn, γs))
-    return E + NL_response(p, Etemp, idxp, idxn, γs)
+function steepening(p, E, γs) #Tested
+    Etemp = E + (0.5 * NL_response(p, E, γs))
+    return E + NL_response(p, Etemp, γs)
 end
 
 function calc_ks(p, n_tot) #tested
@@ -320,6 +293,9 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
+#################
+# File Handling #
+# ###############
 function saveData(fname, E, ρ_max, ΔT_pulse, z)
     open(fname * "/E", "a") do f
         writecsv(f, zip(real(E),imag(E)))
@@ -358,19 +334,6 @@ function simulate(E, p, zinit=0)
     # Initialisation #
     ##################
 
-    #Computed Values used once... Maybe put in derived constants?
-    ρ_crit = p["ω"]^2*me*ϵ0/ee^2
-    k_Ar   = ceil(Ui_Ar / (ħ*p["ω"]))
-    idxp = push!(collect(2:p["Nt"]), 1)
-    idxn = append!([p["Nt"]], collect(1:p["Nt"]-1))
-
-    λ_min = 400
-    λ_max = 1500
-    λ_test = minimum(abs.(p["λ_tot"]-λ_min))
-    λ_min = filter(x -> abs(x - λ_min) == λ_test, p["λ_tot"])[1]
-    λ_test = minimum(abs.(p["λ_tot"]-λ_max))
-    λ_max = filter(x -> abs(x - λ_max) == λ_test, p["λ_tot"])[1]
-
     #Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
     prog = Progress(steps, 0.1)
@@ -388,60 +351,10 @@ function simulate(E, p, zinit=0)
     pressure      = []
 
     while z < p["zmax"]
-
-        # Calculate Pressure
-        pressure_z = calc_pressure(0.008, Pressure, z, p["zmax"])
-        push!(pressure, pressure_z)
-
-        # Update of n, with cutoffs
-        n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
-        n_max = n_tot[findfirst(λ->λ==λ_max, p["λ_tot"])]
-        n_tot[p["λ_tot"] .> λ_max] = n_max
-        n_min = n_tot[findfirst(λ->λ==λ_min, p["λ_tot"])]
-        n_tot[p["λ_tot"] .< λ_min] = n_min
-
-        k_tot, ks = calc_ks(p, n_tot)
-        n  = n_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
-        vg = 1/ks[2]
-
-        # Argon Parameters
-        ns = calc_ns(pressure_z, n, n_tot, p["λ_tot"])
-        β2 = pressure_z * ks[3]
-        β3 = pressure_z * ks[4]
-        β4 = pressure_z * ks[5]
-        τ = 3.5E-13 / pressure_z
-        ρ_at = pressure_z * 1E5 / (Kb * T)
-
-        # Plasma Parameters
-        σ_k = 2.81E-96 * Pressure
-        σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
-        β_k = 10.^(-4 * k_Ar) .* k_Ar * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
-        rrr = -im * ks[1]./(2 * n[1]^2 * ρ_crit) - 0.5 * σ
-        coeff2 = σ/Ui_Ar
-
-        # Dispersion and Laplacian Operators
-        dv_t_2_op = k_tot - ks[1] - ks[2] * p["ωω"]
-
-        # Kerr factors
-        γs = im * ns[2:end] * ks[1]/n[1]
-
-        # Propagation
-        E = prop_lin(p, E, dv_t_2_op, losses, ft, ift)    #Linear
-        E = steepening(p, E, idxp, idxn, γs)              #Steepening
-
-        # Plasma
-        U_ion = plasma_potential(E, p, Ui_Ar)
-        ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
-        plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
-        plasma_loss[isnan.(plasma_loss)] = 0
-
-        # Kerr and Plasma Propagation (NonLinear)
-        kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3]
-                        * abs.(E).^6 +
-                        γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
-        E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
+        E, ρ = simStep(E, p, z, pressure, ft, ift)
 
         if (round(z/p["dz"])%save_every == 0)
+            # Asynchronously write data.
             @async saveData(fname, E, maximum(ρ*1E-6),
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
@@ -453,6 +366,62 @@ function simulate(E, p, zinit=0)
         denstring = @sprintf("%.9f", maximum(ρ*1E-6))
         ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
+end
+
+function simStep(E, p, z, pressure, ft, ift)
+    # Calculate Pressure
+    pressure_z = calc_pressure(0.008, p["pressure"], z, p["zmax"])
+    push!(pressure, pressure_z)
+
+    # Update of n, with cutoffs
+    n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
+    n_max = n_tot[findfirst(λ->λ==p["λ_max"], p["λ_tot"])]
+    n_tot[p["λ_tot"] .> p["λ_max"]] = n_max
+    n_min = n_tot[findfirst(λ->λ==p["λ_min"], p["λ_tot"])]
+    n_tot[p["λ_tot"] .< p["λ_min"]] = n_min
+
+    k_tot, ks = calc_ks(p, n_tot)
+    n  = n_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
+    vg = 1/ks[2]
+
+    # Argon Parameters
+    ns = calc_ns(pressure_z, n, n_tot, p["λ_tot"])
+    β2 = pressure_z * ks[3]
+    β3 = pressure_z * ks[4]
+    β4 = pressure_z * ks[5]
+    τ = 3.5E-13 / pressure_z
+    ρ_at = pressure_z * 1E5 / (Kb * T)
+
+    # Plasma Parameters
+    σ_k = 2.81E-96 * p["pressure"]
+    σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
+    β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
+    rrr = -im * ks[1]./(2 * n[1]^2 * p["ρ_crit"]) - 0.5 * σ
+    coeff2 = σ/Ui_Ar
+
+    # Dispersion and Laplacian Operators
+    dv_t_2_op = k_tot - ks[1] - ks[2] * p["ωω"]
+
+    # Kerr factors
+    γs = im * ns[2:end] * ks[1]/n[1]
+
+    # Propagation
+    E = prop_lin(p, E, dv_t_2_op, losses, ft, ift)    #Linear
+    E = steepening(p, E, γs)                          #Steepening
+
+    # Plasma
+    U_ion = plasma_potential(E, p, Ui_Ar)
+    ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
+    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
+    plasma_loss[isnan.(plasma_loss)] = 0
+
+    # Kerr and Plasma Propagation (NonLinear)
+    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3]
+                    * abs.(E).^6 +
+                    γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
+    E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
+
+    return E, ρ
 end
 
 #=
@@ -493,4 +462,5 @@ else
     E = initField(p)
     saveParams(fname, p)
 end
+
 simulate(E, p, zinit)
