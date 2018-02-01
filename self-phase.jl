@@ -1,6 +1,6 @@
 using Dierckx
 using SpecialFunctions.dawson
-using Base.Filesystem
+using Base.Filesystem 
 using ProgressMeter
 using YAML
 #using Plots
@@ -16,6 +16,8 @@ using YAML
 # Simulation Parameters #
 #########################
 save_every = 25
+FFTW.set_num_threads(nprocs())
+BLAS.set_num_threads(nprocs())
 
 ###################
 # Fixed Constants #
@@ -293,43 +295,7 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
-#################
-# File Handling #
-# ###############
-function saveData(fname, E, ρ_max, ΔT_pulse, z)
-    open(fname * "/E", "a") do f
-        writecsv(f, zip(real(E),imag(E)))
-        write(f, "\n")
-    end
-    open(fname * "/Duration", "a") do f
-        write(f, "$(ΔT_pulse)\n")
-    end
-    open(fname * "/PlasmaDensity", "a") do f
-        write(f, "$(ρ_max)\n")
-    end
-    open(fname * "/z", "w") do f
-        write(f, "$z\n")
-    end
-end
-
-function loadParams(fname)
-    p = YAML.load(open(fname))
-    if haskey(p, "lambda")
-        merge!(p, Dict("λ" => pop!(p, "lambda")))
-    end
-    derive_constants(p)
-    return p
-end
-
-function saveParams(fname, p)
-    open("$fname/params", "w") do f
-        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax"]
-            write(f, "$key:    $(get(p,key,"0000"))\n")
-        end
-    end
-end
-
-function simulate(E, p, zinit=0)
+function simulate(E, p, zinit)
     ##################
     # Initialisation #
     ##################
@@ -422,6 +388,42 @@ function simStep(E, p, z, pressure, ft, ift)
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
 
     return E, ρ
+end
+
+#################
+# File Handling #
+#################
+function saveData(fname, E, ρ_max, ΔT_pulse, z)
+    open(fname * "/E", "a") do f
+        writecsv(f, zip(real(E),imag(E)))
+        write(f, "\n")
+    end
+    open(fname * "/Duration", "a") do f
+        write(f, "$(ΔT_pulse)\n")
+    end
+    open(fname * "/PlasmaDensity", "a") do f
+        write(f, "$(ρ_max)\n")
+    end
+    open(fname * "/z", "w") do f
+        write(f, "$z\n")
+    end
+end
+
+function loadParams(fname)
+    p = YAML.load(open(fname))
+    if haskey(p, "lambda")
+        merge!(p, Dict("λ" => pop!(p, "lambda")))
+    end
+    derive_constants(p)
+    return p
+end
+
+function saveParams(fname, p)
+    open("$fname/params", "w") do f
+        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax"]
+            write(f, "$key:    $(get(p,key,"0000"))\n")
+        end
+    end
 end
 
 #=
