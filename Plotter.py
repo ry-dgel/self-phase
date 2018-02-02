@@ -30,11 +30,16 @@ fig.suptitle(r"Simulation of: $\lambda = %.0f$ nm, $E = %.0f$ $\mu$J, $\Delta t_
 ax1 = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
 
-# Position in Color Space
-cpos = np.linspace(0.2, 0.8, len(data_list))
 
-if len(sys.argv) > 2 and sys.argv[2] == "last":
-    data_list = [data_list[-1]]
+# Only make sys.argv[2]# of plots in between the intitial and final.
+# If set to only 1, prints the final plot
+if len(sys.argv) > 2:
+    data_list = [data_list[i] for i in
+                 map(int, np.linspace(len(data_list)-1,0,sys.argv[2]))]
+
+# Position in Color Space
+cpos = np.linspace(0.8, 0.2, len(data_list))
+
 # Plot each timestep
 for c, data_set in zip(cpos, data_list):
     re, im = data_set.T

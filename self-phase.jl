@@ -296,7 +296,7 @@ function simulate(E, p, zinit)
     #Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
     prog = Progress(steps, 0.1)
-
+    save_every = 25
     #Plan FFT
     ft  = plan_fft(E)
     ift = plan_ifft(E)
@@ -325,7 +325,6 @@ end
 function simStep(E, p, z, ft, ift)
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, p["pressure"], z, p["zmax"])
-    push!(pressure, pressure_z)
 
     # Update of n, with cutoffs
     n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
@@ -423,7 +422,7 @@ end
 =#
 # Saving/Loading Files
 p = loadParams(ARGS[1]) #Read params from filename passed to command
-fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.0fm",
+fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm",
                  p["λ"]*1E9, p["Energy"]*1E6, p["pressure"], p["Tfwhm"]*1E15, p["zmax"])
 zinit = 0
 if fname ∈ readdir()
