@@ -3,9 +3,9 @@
 Done by Rigel and Joseph as part of undergraduate thesis.
 
 ## Todo
-* Translate Main Loop
-* Translate "PPT.m"
-* Turn chunks of main loop into functions
+* ~~Translate Main Loop~~
+* ~~Translate "PPT.m"~~
+* ~~Turn chunks of main loop into functions~~
 * Optimize
 * Test
-* Use plan fft/ifft to speed up all the transforms
+* ~~Use plan fft/ifft to speed up all the transforms~~

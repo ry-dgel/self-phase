@@ -1,6 +1,6 @@
 using Dierckx
 using SpecialFunctions.dawson
-using Base.Filesystem 
+using Base.Filesystem
 using ProgressMeter
 using YAML
 #using Plots
@@ -12,21 +12,16 @@ using YAML
 ██      ██    ██ ██  ██ ██      ██    ██    ██   ██ ██  ██ ██    ██         ██
  ██████  ██████  ██   ████ ███████    ██    ██   ██ ██   ████    ██    ███████
 =#
-#########################
-# Simulation Parameters #
-#########################
-save_every = 25
+# Does this speed things up??
 FFTW.set_num_threads(nprocs())
 BLAS.set_num_threads(nprocs())
 
 ###################
 # Fixed Constants #
 ###################
-const Fiber_D  = 270E-6     # Fiber Diameter      m
-#const Fiber_L  = 100E-3    # Fiber Length       m
-
-const losses   = 0.13       # Absorption Coef.    1/m
-
+# Setup constants
+const Fiber_D  = 270E-6       # Fiber Diameter          m
+const losses   = 0.13         # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13
 const Zeff_Ar = 1
@@ -138,9 +133,9 @@ function derive_constants(p)
     merge!(p,dp)
 end
 
-##############
-# Simulation #
-##############
+######################
+# Simulation Helpers #
+######################
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
     E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
@@ -233,7 +228,7 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n6_800  = 4e-58   * pressure
     n8_800  =-1.7e-75 * pressure
     n10_800 = 8.8e-94 * pressure
-    
+
     n_800 = n_tot[indmin(abs.(λ_tot - 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
     n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
@@ -294,10 +289,10 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
 end
 
 function simulate(E, p, zinit)
+
     ##################
     # Initialisation #
     ##################
-
     #Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
     prog = Progress(steps, 0.1)
@@ -307,15 +302,10 @@ function simulate(E, p, zinit)
     ift = plan_ifft(E)
 
     # Propagation variables
-    zpoints       = 1000
-    dist          = zeros(zpoints)
-    ρ_max         = zeros(zpoints)
-    ΔT_pulse      = zeros(zpoints)
     z             = zinit
-    pressure      = []
 
     while z < p["zmax"]
-        E, ρ = simStep(E, p, z, pressure, ft, ift)
+        E, ρ = simStep(E, p, z, ft, ift)
 
         if (round(z/p["dz"])%save_every == 0)
             # Asynchronously write data.
@@ -332,7 +322,7 @@ function simulate(E, p, zinit)
     end
 end
 
-function simStep(E, p, z, pressure, ft, ift)
+function simStep(E, p, z, ft, ift)
     # Calculate Pressure
     pressure_z = calc_pressure(0.008, p["pressure"], z, p["zmax"])
     push!(pressure, pressure_z)
@@ -418,7 +408,7 @@ end
 
 function saveParams(fname, p)
     open("$fname/params", "w") do f
-        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax"]
+        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax", "pressure"]
             write(f, "$key:    $(get(p,key,"0000"))\n")
         end
     end
@@ -433,7 +423,8 @@ end
 =#
 # Saving/Loading Files
 p = loadParams(ARGS[1]) #Read params from filename passed to command
-fname = "$(p["λ"])nm_$(p["Energy"])J_$(p["Tfwhm"])s_$(p["zmax"])m"
+fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.0fm",
+                 p["λ"]*1E9, p["Energy"]*1E6, p["pressure"], p["Tfwhm"]*1E15, p["zmax"])
 zinit = 0
 if fname ∈ readdir()
     print("Found data for these parameters, load and continue? (y)/n: ")

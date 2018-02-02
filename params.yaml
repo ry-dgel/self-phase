@@ -1,8 +1,8 @@
-Energy:     150E-6
+Energy:     300E-6
 Tfwhm:      130E-15
-lambda:     800E-9
+lambda:     550E-9
 dz:         2E-3
-zmax:       0.5
+zmax:       2.5
 Nt:         16384
 tmax:       1200E-15
-pressure:   1.4
+pressure:   3.0
