@@ -453,5 +453,5 @@ else
     saveParams(fname, p)
 end
 
-saveData(fname, E, 0, 0, 0)
+saveData(fname, E, 0, 0, zinit)
 simulate(E, p, zinit)
