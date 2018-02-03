@@ -20,7 +20,7 @@ BLAS.set_num_threads(nprocs())
 # Fixed Constants #
 ###################
 # Setup constants
-const losses   = 0.13         # Absorption Coef.        1/m
+const losses  = 0.13         # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13
 const Zeff_Ar = 1
@@ -140,10 +140,10 @@ function initField(p)
     E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
     E             = E0 .* E
 
-    #Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
-    #Chirp_function = 0
-	#E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
-    #E              = ifftshift(ifft(ifftshift(E_TF)))
+    Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 + get(p, "TOD", 0) .* p["ωω"] .^ 3
+    Chirp_function = 0
+	E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
+    E              = ifftshift(ifft(ifftshift(E_TF)))
 
     #Clear vars
     #Chirp_function = nothing; E_TF = nothing; gc()
@@ -267,7 +267,7 @@ function plasma_potential(E,p,Ui) #Tested
         factorial(abs(m)) * factorial(l-abs(m))
 
     A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
-             dawson.(sqrt.(complex(abs.(β.*(z-ν))))) for z in kmin:kmin+2])
+             dawson.(sqrt.(complex(abs.(β.*(z - ν))))) for z in kmin:kmin+2])
 
     potential = ω_au * C_nl2 * f * sqrt(6/π) *
                 (Ui / (2 * Uh)) * A .*
@@ -287,7 +287,7 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
-function simulate(E, p, zinit)
+function simulate(E, p, zinit, fname)
 
     ##################
     # Initialisation #
@@ -323,7 +323,7 @@ end
 
 function simStep(E, p, z, ft, ift)
     # Calculate Pressure
-    pressure_z = calc_pressure(0.008, p["pressure"], z, p["zmax"])
+    pressure_z = calc_pressure(p["Pin"], p["Pout"], z, p["zmax"])
 
     # Update of n, with cutoffs
     n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
@@ -345,7 +345,7 @@ function simStep(E, p, z, ft, ift)
     ρ_at = pressure_z * 1E5 / (Kb * T)
 
     # Plasma Parameters
-    σ_k = 2.81E-96 * p["pressure"]
+    σ_k = 2.81E-96 * p["Pout"]
     σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
     β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
     rrr = -im * ks[1]./(2 * n[1]^2 * p["ρ_crit"]) - 0.5 * σ
@@ -397,7 +397,7 @@ end
 
 function loadParams(fname)
     p = YAML.load(open(fname))
-    
+
     # We use λ in the code, so replace the key by removing the value and reinserting it
     if haskey(p, "lambda")
         merge!(p, Dict("λ" => pop!(p, "lambda")))
@@ -417,8 +417,15 @@ function saveParams(fname, p)
         write(f, @sprintf("zmax:      %s\n",     p["zmax"]))
         write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
         write(f, @sprintf("tmax:      %.1e\n",   p["tmax"]))
-        write(f, @sprintf("pressure:  %d\n",     p["pressure"]))
+        write(f, @sprintf("Pin:       %d\n",     p["Pin"]))
+        write(f, @sprintf("Pout:      %d\n",     p["Pout"]))
         write(f, @sprintf("fiberD:    %dE-6\n",  p["fiberD"]*1E6))
+        if haskey(p, "Chrip")
+            write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
+        end
+        if haskey(p, "TOD")
+            write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
+        end
     end
 end
 
@@ -429,10 +436,11 @@ end
 ██  ██  ██ ██   ██ ██ ██  ██ ██
 ██      ██ ██   ██ ██ ██   ████
 =#
+
 # Saving/Loading Files
 p = loadParams(ARGS[1]) #Read params from filename passed to command
 fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm",
-                 p["λ"]*1E9, p["Energy"]*1E6, p["pressure"], p["Tfwhm"]*1E15, p["zmax"])
+                 p["λ"]*1E9, p["Energy"]*1E6, p["Pout"], p["Tfwhm"]*1E15, p["zmax"])
 zinit = 0
 if fname ∈ readdir()
     print("Found data for these parameters, load and continue? (y)/n: ")
@@ -463,4 +471,4 @@ else
 end
 
 saveData(fname, E, 0, 0, zinit)
-simulate(E, p, zinit)
+simulate(E, p, zinit, fname)
