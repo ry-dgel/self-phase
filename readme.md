@@ -2,6 +2,7 @@
 ## Code for simulation to be translated from matlab -> julia
 Done by Rigel and Joseph as part of undergraduate thesis.
 
+Parallel branch for running the simulation over a range of input parameters
 ## Todo
 * ~~Translate Main Loop~~
 * ~~Translate "PPT.m"~~
