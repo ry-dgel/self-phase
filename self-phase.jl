@@ -20,7 +20,6 @@ BLAS.set_num_threads(nprocs())
 # Fixed Constants #
 ###################
 # Setup constants
-const Fiber_D  = 270E-6       # Fiber Diameter          m
 const losses   = 0.13         # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13
@@ -138,7 +137,7 @@ end
 ######################
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
-    E0            = sqrt(2*p["Power"]/(pi*Fiber_D^2))
+    E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
     E             = E0 .* E
 
     #Chirp_function = p["Chirp"] * p[entrance"ωω"] .^ 2 + TOD .* p["ωω"] .^ 3
@@ -398,18 +397,28 @@ end
 
 function loadParams(fname)
     p = YAML.load(open(fname))
+    
+    # We use λ in the code, so replace the key by removing the value and reinserting it
     if haskey(p, "lambda")
         merge!(p, Dict("λ" => pop!(p, "lambda")))
     end
+
+    # Derive additional constants
     derive_constants(p)
     return p
 end
 
 function saveParams(fname, p)
     open("$fname/params", "w") do f
-        for key in ["Energy", "Tfwhm", "λ", "dz", "zmax", "Nt", "tmax", "pressure"]
-            write(f, "$key:    $(get(p,key,"0000"))\n")
-        end
+        write(f, @sprintf("Energy:    %dE-6\n",  p["Energy"]*1E6))
+        write(f, @sprintf("Tfwhm:     %dE-15\n", p["Tfwhm"]*1E15))
+        write(f, @sprintf("lambda:    %dE-9\n",  p["λ"]*1E9))
+        write(f, @sprintf("dz:        %s\n",     p["dz"]))
+        write(f, @sprintf("zmax:      %s\n",     p["zmax"]))
+        write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
+        write(f, @sprintf("tmax:      %.1e\n",   p["tmax"]))
+        write(f, @sprintf("pressure:  %d\n",     p["pressure"]))
+        write(f, @sprintf("fiberD:    %dE-6\n",  p["fiberD"]*1E6))
     end
 end
 

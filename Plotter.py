@@ -16,17 +16,19 @@ with open(folder + "/E") as f:
 
 with open(folder + "/params") as f:
     p = yaml.load(f)
+    for key, val in p.items():
+        p[key] = float(val)
 
 # x axese
 dt     = p["tmax"]/(p["Nt"]-1)        # Time step
 points = np.arange(-p["Nt"]/2,p["Nt"]/2,1)
 t      = points*dt  # Time grid iterator
 f      = points/p["tmax"]    # Frequency grid 0 centered
-f      = f + 299792458/p["λ"]
+f      = f + 299792458/p["lambda"]
 # frequency axis
 # Initialize figure
 fig = plt.figure()
-fig.suptitle(r"Simulation of: $\lambda = %.0f$ nm, $E = %.0f$ $\mu$J, $\Delta t_{fwhm} = %.0f$ fs, $P=%.0f$ Bar" % (p["λ"]*1E9, p["Energy"]*1E6, p["Tfwhm"]*1E15, p["pressure"]))
+fig.suptitle(r"Simulation of: $\lambda = %.0f$ nm, $E = %.0f$ $\mu$J, $\Delta t_{fwhm} = %.0f$ fs, $P=%.0f$ Bar" % (p["lambda"]*1E9, p["Energy"]*1E6, p["Tfwhm"]*1E15, p["pressure"]))
 ax1 = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
 
@@ -58,7 +60,7 @@ for c, data_set in zip(cpos, data_list):
     ax2.plot(f*1e-12,np.sqrt(np.power(re,2) + np.power(im, 2)),
              color=plt.cm.viridis(c))
 # THIS IS DIRTY, FIX THIS WHEN YOU'RE LESS LAZY
-ax2.set_xlim(np.array([-100,100]) + 299792458/p["λ"]*1e-12)
+ax2.set_xlim(np.array([-100,100]) + 299792458/p["lambda"]*1e-12)
 ax2.set_title("Pulse Spectrum")
 ax2.set_xlabel("f (THz)")
 ax2.set_ylabel("Energy Density (a.u)")
