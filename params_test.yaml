@@ -7,6 +7,6 @@ Nt:         16384
 tmax:       1200E-15
 Pin:        1.01
 Pout:       1.01
-Chirp:      1200
+Chirp:      1200E-30
 fiberD:     400E-6
 
