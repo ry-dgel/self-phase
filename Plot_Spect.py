@@ -36,7 +36,14 @@ f      = f + 299792458/p["lambda"]
 # frequency axis
 # Initialize figure
 spectra = np.array([norm_spectrum(data_set) for data_set in data_list])
-plt.pcolormesh(spectra.T)
-plt.axis([0,55,8000,9000])
+
+fig, ax = plt.subplots(1)
+plt.pcolormesh(spectra.T, figure=fig)
+
+# Set limits of visible spectrum show, frequency in THz on the scale
+ax.axis([0,len(data_list),np.argmin(np.abs(f - 400E12)), np.argmin(np.abs(f - 800E12))])
+freq_axis = np.arange(300,850,50)
+ax.set_yticks(list(map(lambda x: np.argmin(np.abs(f - x*1E12)), freq_axis)))
+ax.set_yticklabels(list(map(lambda x: str(int(x)), freq_axis)))
 plt.show()
 

@@ -140,13 +140,10 @@ function initField(p)
     E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
     E             = E0 .* E
 
-    Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 + get(p, "TOD", 0) .* p["ωω"] .^ 3
-    Chirp_function = 0
+    Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 +
+                     get(p, "TOD", 0) .* p["ωω"] .^ 3
 	E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
     E              = ifftshift(ifft(ifftshift(E_TF)))
-
-    #Clear vars
-    #Chirp_function = nothing; E_TF = nothing; gc()
 end
 
 function calc_pressure(p_in, p_out, z, zmax) #tested
@@ -287,30 +284,39 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     return ρ_Ar
 end
 
-function simulate(E, p, zinit, fname)
+function simulate(E, p, zinit, fname, num_saves)
 
     ##################
     # Initialisation #
     ##################
-    #Setting up progress meter
+    # Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
     prog = Progress(steps, 0.1)
-    save_every = 25
+
+    # How often to save data.
+    if num_saves > 2
+        save_every = ceil(steps-1/((num_saves)-2))
+    else
+        save_every = Inf
+    end
+
     #Plan FFT
     ft  = plan_fft(E)
     ift = plan_ifft(E)
 
     # Propagation variables
-    z             = zinit
-
+    z = zinit
+    ρ = 0
     while z < p["zmax"]
-        E, ρ = simStep(E, p, z, ft, ift)
-
         if (round(z/p["dz"])%save_every == 0)
-            # Asynchronously write data.
+            # Async data write, resync right before to ensure no double write
+            @sync
             @async saveData(fname, E, maximum(ρ*1E-6),
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
+
+        E, ρ = simStep(E, p, z, ft, ift)
+
 
         # Update Distance
         z += p["dz"]
@@ -319,6 +325,9 @@ function simulate(E, p, zinit, fname)
         denstring = @sprintf("%.9f", maximum(ρ*1E-6))
         ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
+
+    #Save final data
+    saveData(fname, E, maximum(ρ*1E-6), calc_duration(E,p["t_vec"]*p["dt"]), z)
 end
 
 function simStep(E, p, z, ft, ift)
@@ -381,7 +390,10 @@ end
 #################
 function saveData(fname, E, ρ_max, ΔT_pulse, z)
     open(fname * "/E", "a") do f
-        writecsv(f, zip(real(E),imag(E)))
+        #write(f, @sprintf("\# z = %f\n", z))
+        for pair in zip(real(E),imag(E))
+            write(f, @sprintf("%.10e,%.10e\n",pair[1],pair[2]))
+        end
         write(f, "\n")
     end
     open(fname * "/Duration", "a") do f
@@ -470,5 +482,5 @@ else
     saveParams(fname, p)
 end
 
-saveData(fname, E, 0, 0, zinit)
-simulate(E, p, zinit, fname)
+numSaves = parse(Int, ARGS[2])
+simulate(E, p, zinit, fname, numSaves)
