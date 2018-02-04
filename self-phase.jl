@@ -309,8 +309,7 @@ function simulate(E, p, zinit, fname, num_saves)
     ρ = 0
     while z < p["zmax"]
         if (round(z/p["dz"])%save_every == 0)
-            # Async data write, resync right before to ensure no double write
-            @sync
+            # Async data write
             @async saveData(fname, E, maximum(ρ*1E-6),
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
@@ -449,38 +448,30 @@ end
 ██      ██ ██   ██ ██ ██   ████
 =#
 
-# Saving/Loading Files
-p = loadParams(ARGS[1]) #Read params from filename passed to command
-fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm",
-                 p["λ"]*1E9, p["Energy"]*1E6, p["Pout"], p["Tfwhm"]*1E15, p["zmax"])
-zinit = 0
-if fname ∈ readdir()
-    print("Found data for these parameters, load and continue? (y)/n: ")
-    input = readline()
-    if input != "n"
-        zinit = float(read("$fname/z"))
-        E[:] = readcsv("$fname/E")[end][:]
-    else
-        print("Overwrite old data? y/(n): ")
-        input = readline()
-        if input != "y"
-            i = 2
-            while fname*"_($i)" ∈ readdir()
-                i += 1
-            end
-            fname = fname*"_($i)"
+function initialize(fname, p, resume, keep)
+    zinit = 0
+    if fname ∈ readdir()
+        if resume
+            zinit = float(read("$fname/z"))
+            E[:] = readcsv("$fname/E")[end][:]
         else
-            rm(fname, recursive=true)
+            if keep
+                i = 2
+                while fname*"_($i)" ∈ readdir()
+                    i += 1
+                end
+                fname = fname*"_($i)"
+            else
+                rm(fname, recursive=true)
+            end
+            mkdir(fname)
+            E = initField(p)
+            saveParams(fname, p)
         end
+    else
         mkdir(fname)
         E = initField(p)
         saveParams(fname, p)
     end
-else
-    mkdir(fname)
-    E = initField(p)
-    saveParams(fname, p)
+    return E, zinit
 end
-
-numSaves = parse(Int, ARGS[2])
-simulate(E, p, zinit, fname, numSaves)

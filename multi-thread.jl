@@ -1,14 +1,14 @@
-include("self-phase.jl")
+@everywhere include("self-phase.jl")
 using YAML
 using Iterators
 
-function unpack(p)
+@everywhere function unpack(p, numSaves)
     fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
                      p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Tfwhm"]*1E15, p["zmax"], p["Chirp"], p["fiberD"]*1E6)
     derive_constants(p)
-    checkForData(fname, p)
-    saveData(fname)
-    simulate(E,p,zinit)
+    E, zinit = initialize(fname, p, "resume" in ARGS, "keep" in ARGS)
+    saveData(fname, E, 0, 0, zinit)
+    simulate(E, p, zinit, fname, numSaves)
 end
 
 lists = YAML.load(open(ARGS[1]))
@@ -25,7 +25,9 @@ end
 
 param_tuples = collect(product(values(lists)...))
 
-for jawn in param_tuples
-    p = Dict{Any,Any}(zip(keys(lists), jawn))
-    unpack(p)
+if "data" ∉ readdir()
+    mkdir("data")
 end
+@everywhere cd("data")
+numSaves = parse(Int, ARGS[2])
+pmap(jawn -> unpack(Dict{Any,Any}(zip(keys(lists), jawn)), numSaves), param_tuples)
