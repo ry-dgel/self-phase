@@ -2,7 +2,11 @@
 ## Code for simulation to be translated from matlab -> julia
 Done by Rigel and Joseph as part of undergraduate thesis.
 
-Parallel branch for running the simulation over a range of input parameters
+```
+julia multi-thread.jl <Parameter File> <Number of times to save data>
+```
+
+view params.yaml for example of parameter file
 ## Todo
 * ~~Translate Main Loop~~
 * ~~Translate "PPT.m"~~
@@ -10,3 +14,4 @@ Parallel branch for running the simulation over a range of input parameters
 * Optimize
 * Test
 * ~~Use plan fft/ifft to speed up all the transforms~~
+* ~~Multi-Thread drifting~~
