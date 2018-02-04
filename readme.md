@@ -3,7 +3,7 @@
 Done by Rigel and Joseph as part of undergraduate thesis.
 
 ```
-julia multi-thread.jl <Parameter File> <Number of times to save data>
+julia -p <number of sims to run at once/cores to use> multi-thread.jl <Parameter File> <Number of times to save data>
 ```
 
 view params.yaml for example of parameter file
