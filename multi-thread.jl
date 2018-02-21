@@ -3,7 +3,7 @@ using YAML
 using Iterators
 
 @everywhere function unpack(p, numSaves)
-    fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
+    fname = @sprintf("%.0fnm_%.0fμJ_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
                      p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Tfwhm"]*1E15, p["zmax"], p["Chirp"], p["fiberD"]*1E6)
     derive_constants(p)
     E, zinit = initialize(fname, p, "resume" in ARGS, "keep" in ARGS)

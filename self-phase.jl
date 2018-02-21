@@ -278,8 +278,8 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
     for i in 1:(p["Nt"]-1)
         ρ_Ar[i+1] = ρ_Ar[i] +
-                    p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
-                    (coeff2 * abs(E[i])^2)*ρ_Ar[i])
+                    p["dt"] * (-α*ρ_Ar[i]^2 + Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
+                               (coeff2 * abs(E[i])^2)*ρ_Ar[i])
     end
     return ρ_Ar
 end
@@ -295,7 +295,7 @@ function simulate(E, p, zinit, fname, num_saves)
 
     # How often to save data.
     if num_saves > 2
-        save_every = ceil(steps-1/((num_saves)-2))
+        save_every = ceil((steps-1)/((num_saves)-2))
     else
         save_every = Inf
     end
@@ -346,16 +346,16 @@ function simStep(E, p, z, ft, ift)
 
     # Argon Parameters
     ns = calc_ns(pressure_z, n, n_tot, p["λ_tot"])
-    β2 = pressure_z * ks[3]
-    β3 = pressure_z * ks[4]
-    β4 = pressure_z * ks[5]
+    #β2 = pressure_z * ks[3]
+    #β3 = pressure_z * ks[4]
+    #β4 = pressure_z * ks[5]
     τ = 3.5E-13 / pressure_z
     ρ_at = pressure_z * 1E5 / (Kb * T)
 
     # Plasma Parameters
     σ_k = 2.81E-96 * p["Pout"]
     σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
-    β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
+    #β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
     rrr = -im * ks[1]./(2 * n[1]^2 * p["ρ_crit"]) - 0.5 * σ
     coeff2 = σ/Ui_Ar
 
@@ -366,7 +366,7 @@ function simStep(E, p, z, ft, ift)
     γs = im * ns[2:end] * ks[1]/n[1]
 
     # Propagation
-    E = prop_lin(p, E, dv_t_2_op, losses, ft, ift)    #Linear
+    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
     E = steepening(p, E, γs)                          #Steepening
 
     # Plasma
