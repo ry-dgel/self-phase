@@ -21,7 +21,7 @@ for root, folders, files in os.walk(sys.argv[1]):
             for key, val in p.items():
                 p[key] = float(val)
 
-# x axese
+# x axes
         dt     = p["tmax"]/(p["Nt"]-1)        # Time step
         points = np.arange(-p["Nt"]/2,p["Nt"]/2,1)
         t      = points*dt  # Time grid iterator
@@ -45,11 +45,16 @@ for root, folders, files in os.walk(sys.argv[1]):
         cpos = np.linspace(0.8, 0.2, len(data_list))
 
 # Plot each timestep
-        for c, data_set in zip(cpos, data_list):
-            re, im = data_set.T
-            ax1.plot(t*1e15,1e-4*(np.power(re,2) + np.power(im,2)),
-                     #color=plt.cm.viridis(c))
-                     )
+        with open(root + "/" + folder + "/pulse width",'w') as file:
+        	for c, data_set in zip(cpos, data_list):
+        	    re, im = data_set.T
+        	    I = re**2 + im**2
+        	    hm = 0.5 * max(I)
+        	    pulse_width = I[np.argmax(np.flip(I,0) > hm)] - I[np.argmax(I > hm)]
+        	    file.write("%f\n"%pulse_width)        	    
+        	    ax1.plot(t*1e15,1e-4*(np.power(re,2) + np.power(im,2)),
+        	             #color=plt.cm.viridis(c))
+        	             )
         ax1.set_title("Pulse Shape")
         ax1.set_xlabel("t (fs)")
         ax1.set_ylabel(r"Intensity (W$\cdot$cm$^{-2}$)")
@@ -62,12 +67,16 @@ for root, folders, files in os.walk(sys.argv[1]):
                 re = np.real(Ef)
                 im = np.imag(Ef)
                 If = (np.power(re,2) + np.power(im,2))
-                ax2.plot(f*1e-12,If/max(If),
+                #ax2.plot(f*1e-12,If/max(If),
                          #color=plt.cm.viridis(c))
-                         )
-                If_non_zero = np.where(np.round(f - 1E-10) > 0)[0]
-                bandwidth = 1e-12 * (f[If_non_zero[-1]] - f[If_non_zero[0]])
+                         #)
+                #If_non_zero = np.where(np.round(f - 1E-10) > 0)[0]
+                #bandwidth = 1e-12 * (f[If_non_zero[-1]] - f[If_non_zero[0]])
+                tm = 0.1 * max(If)
+                bandwidth = If[np.argmax(np.flip(If,0) > tm)] - If[np.argmax(If > tm)]
                 bf.write("%f\n" % bandwidth)
+
+
 # THIS IS DIRTY, FIX THIS WHEN YOU'RE LESS LAZY
         ax2.set_xlim(np.array([-100,100]) + 299792458/p["lambda"]*1e-12)
         ax2.set_title("Pulse Spectrum")
@@ -75,5 +84,5 @@ for root, folders, files in os.walk(sys.argv[1]):
         ax2.set_ylabel("Energy Density (a.u)")
 
         fig.savefig(root+"/" + folder + "/plot.png")
-        fig.close()
+        plt.close()
 
