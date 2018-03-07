@@ -231,7 +231,7 @@ function derive_constants(p)
         "ff"      => ff,
         "ωω"      => ωω,
 
-        "λ_tot"   => λ_tot,
+        s"λ_tot"   => λ_tot,
         "ωω_tot"  => ωω_tot,
         "λ_max"   => λ_max,
         "λ_min"   => λ_min,
