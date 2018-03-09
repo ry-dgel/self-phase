@@ -1,11 +1,20 @@
 import numpy as np
 from numpy import fft as f 
 
-def populate_metrics(fiber_run):
+def populate_metrics(fiber_run, fname):
 	bandwidth = bandwidth(fiber_run.fields[-1])
 	pulse_width = pulse_width(fiber_run.fields[-1])
 	power_ratio = power_ratio(fiber_run.fields[-1], fiber_run.fields[0])
-	
+	rho_max = plas_denzel(fname)
+	metrics = {"pwidth":pulse_width, "bwidth":bandwidth[0], "l_edge":bandwidth[1], "r_edge":bandwidth[2],
+		"rho_max":rho_max, "power":power_ratio}
+
+def plas_denzel(fname):
+	plas_denzel = open(fname + "/PlasmaDensity").read().split("\n")
+	for x in plas_denzel:
+		x = float(x)
+	rho_max = max(plas_denzel)
+	return rho_max	
 
 def bandwidth(E):
 	Ef = f.fftshift(f.fft(f.fft(E)))
