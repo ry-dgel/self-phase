@@ -11,13 +11,13 @@ class fiber_set:
 
     def maxmetric(self, metric):
         maximum = max(map(lambda run : run.metrics[metric], self.runs))
-        return next(run for run in self.runs if 
-                    self.runs.metrics[metric] == maximum)
+        return maxium, next(run for run in self.runs if 
+                            self.runs.metrics[metric] == maximum)
 
     def minmetric(self, metric):
         minimum = min(map(lambda run : run.metrics[metric], self.runs))
-        return next(run for run in self.runs if
-                    self.runs.metrics[metric] == minimum)
+        return minimum, next(run for run in self.runs if
+                             self.runs.metrics[metric] == minimum)
 
     def constparam(self, param, value):
         return [run for run in self.runs if self.runs.params[param] == value]

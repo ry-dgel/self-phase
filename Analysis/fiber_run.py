@@ -1,6 +1,7 @@
 import yaml
 from itertools import groupby
 import numpy as np
+import numpy.fft as fft
 import metrics
 
 class fiber_run:
@@ -29,3 +30,7 @@ class fiber_run:
                 self.params[key] = float(val)
 
         self.metrics = metrics.populate_metrics(self, fname)
+
+    def spectra(self):
+        return [fft.fftshift(fft.fft(fft.fftshift(field))) for 
+                field in self.fields]
