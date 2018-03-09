@@ -11,14 +11,12 @@ def populate_metrics(fiber_run, fname):
 	return metrics
 
 def plas_denzel(fname):
-	plas_denzel = open(fname + "/PlasmaDensity").read().split("\n")
-	for x in plas_denzel:
-		x = float(x)
+	plas_denzel = np.genfromtxt(fname)
 	rho_max = max(plas_denzel)
 	return rho_max	
 
 def bandwidth(E):
-	Ef = f.fftshift(f.fft(f.fft(E)))
+	Ef = f.fftshift(f.fft(f.fftshift(E)))
 	re = np.real(Ef)
 	im = np.imag(Ef)
 	If = re**2 + im**2
