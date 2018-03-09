@@ -8,6 +8,7 @@ def populate_metrics(fiber_run, fname):
 	rho_max = plas_denzel(fname)
 	metrics = {"pwidth":pulse_width, "bwidth":bandwidth[0], "l_edge":bandwidth[1], "r_edge":bandwidth[2],
 		"rho_max":rho_max, "power":power_ratio}
+	return metrics
 
 def plas_denzel(fname):
 	plas_denzel = open(fname + "/PlasmaDensity").read().split("\n")
