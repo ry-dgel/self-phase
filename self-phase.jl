@@ -79,7 +79,7 @@ as = [a0,a1,a2,a3,a4,a5,a6,a7]
 
 Saves all the data to respective files within the folder given by fname
 """
-function saveData(fname, E, ρ_max, ΔT_pulse, z)
+function saveData(fname, E, ΔT_pulse, z)
     open(fname * "/E", "a") do f
         #write(f, @sprintf("\# z = %f\n", z))
         for pair in zip(real(E),imag(E))
@@ -89,9 +89,6 @@ function saveData(fname, E, ρ_max, ΔT_pulse, z)
     end
     open(fname * "/Duration", "a") do f
         write(f, "$(ΔT_pulse)\n")
-    end
-    open(fname * "/PlasmaDensity", "a") do f
-        write(f, "$(ρ_max)\n")
     end
     open(fname * "/z", "w") do f
         write(f, "$z\n")
@@ -289,7 +286,7 @@ end
 """
     prop_lin(p, E, deriv_t_2, losses, ft, ift)
 
-Computes the linear evoltion of a field E. deriv_t_2 is computed in main.
+Computes the linear evoltion of a field E. deriv_t_2 is computed in sim step.
 ft and ift are pre-planned FFT matrices for forward and reverse FT. losses is
 the absorption coeff of the fiber.
 """
@@ -494,8 +491,12 @@ function simulate(E, p, zinit, fname, num_saves)
     while z < p["zmax"]
         if (round(z/p["dz"])%save_every == 0)
             # Async data write
-            @async saveData(fname, E, maximum(ρ*1E-6),
+            @async saveData(fname, E,
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
+        end
+        ρ_max = maximum(ρ*1E-6),
+        open(fname * "/PlasmaDensity", "a") do f
+            write(f, "$(ρ_max)\n")
         end
 
         E, ρ = simStep(E, p, z, ft, ift)
