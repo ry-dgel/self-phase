@@ -20,7 +20,7 @@ def plas_denzel(fname):
 def bandwidth(E):
 	Ef = f.fftshift(f.fft(f.fft(E)))
 	re = np.real(Ef)
-	im = np.im(Ef)
+	im = np.imag(Ef)
 	If = re**2 + im**2
 	tm = 0.1*max(If)
 	right_edge = If[np.argmax(np.flip(If,0) > tm)]
@@ -30,7 +30,7 @@ def bandwidth(E):
 
 def pulse_width(E):
 	re = np.real(E)
-	im = np.im(E)
+	im = np.imag(E)
 	I = re**2 + im**2
 	tm = 0.1*max(I)
 	pw = I[np.argmax(np.flip(I,0) > tm)] - I[np.argmax(I > tm)]
@@ -38,10 +38,10 @@ def pulse_width(E):
 
 def power_ratio(E, E0):
 	re = np.real(E)
-	im = np.im(E)
+	im = np.imag(E)
 	I = re**2 + im**2
 	re = np.real(E0)
-	im = np.im(E0)
+	im = np.imag(E0)
 	I0 = re**2 + im**2
 	P0 = np.trapz(I0)
 	Pf = np.trapz(I)
