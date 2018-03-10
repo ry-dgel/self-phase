@@ -30,7 +30,8 @@ class fiber_run:
                 self.params[key] = float(val)
 
         self.metrics = metrics.populate_metrics(self, fname)
-
+    
+    # Returns a list of the spectra corresponding to each field
     def spectra(self):
         return [fft.fftshift(fft.fft(fft.fftshift(field))) for 
                 field in self.fields]
