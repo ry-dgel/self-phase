@@ -75,7 +75,7 @@ as = [a0,a1,a2,a3,a4,a5,a6,a7]
 # File Handling #
 #################
 """
-    saveData(fname, E, ρ_max, ΔT_pulse, z)
+    saveData(fname, E, ΔT_pulse, z)
 
 Saves all the data to respective files within the folder given by fname
 """
@@ -189,9 +189,9 @@ function derive_constants(p)
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
     Power  = sqrt(2/pi) * p["Energy"]/σ_t # Max power delivered by pulse
 
-    dt     = p["tmax"]/(p["Nt"]-1)        # Time step
-    points = (-p["Nt"]/2:1:p["Nt"]/2-1)
-    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2-1)*dt  # Time grid iterator
+    dt     = p["tmax"]/(p["Nt"])        # Time step
+    points = (-p["Nt"]/2:1:p["Nt"]/2)
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
 
     ff     = points./p["tmax"]            # Frequency grid
     ωω     = (2*pi)*ff                    # Angular frequency grid
@@ -494,8 +494,8 @@ function simulate(E, p, zinit, fname, num_saves)
             @async saveData(fname, E,
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
-        ρ_max = maximum(ρ*1E-6),
-        open(fname * "/PlasmaDensity", "a") do f
+        ρ_max = maximum(ρ*1E-6)
+        @async open(fname * "/PlasmaDensity", "a") do f
             write(f, "$(ρ_max)\n")
         end
 
@@ -511,7 +511,7 @@ function simulate(E, p, zinit, fname, num_saves)
     end
 
     #Save final data
-    saveData(fname, E, maximum(ρ*1E-6), calc_duration(E,p["t_vec"]*p["dt"]), z)
+    saveData(fname, E, calc_duration(E,p["t_vec"]*p["dt"]), z)
 end
 
 """
@@ -559,7 +559,7 @@ function simStep(E, p, z, ft, ift)
     E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
     E = steepening(p, E, γs)                          #Steepening
 
-    # Plasma
+   # Plasma
     U_ion = plasma_potential(E, p, Ui_Ar)
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
     plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]

@@ -31,8 +31,9 @@ def bandwidth(params, E):
 
 def pulse_width(params, E):
     I = np.power(np.abs(E),2)
-
-    time = np.arange(-params["Nt"]/2, params["Nt"]/2, 1) * params["dt"]
+    
+    dt   = params["tmax"]/params["Nt"]
+    time = np.arange(-params["Nt"]/2, params["Nt"]/2, 1) * dt
 
     tm = 0.1*max(I)
     pw = time[len(I) - np.argmax(np.flip(I,0) > tm)] - time[np.argmax(I > tm)]

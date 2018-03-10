@@ -1,6 +1,7 @@
 @everywhere include("self-phase.jl")
 using YAML
 using Iterators
+#=
 """
 To run, simply use:
 ```
@@ -18,6 +19,7 @@ julia multi-thread.jl params.yaml 10
 given a dictionary of inital paremeters, and a number of times to save, performs
 the entire simulation with those parameters.
 """
+=#
 @everywhere function unpack(p, numSaves)
     # Generate folder string
     fname = @sprintf("%.0fnm_%.0fμJ_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
@@ -28,7 +30,7 @@ the entire simulation with those parameters.
     # Initialize electric field
     E, zinit = initialize(fname, p, "resume" in ARGS, "keep" in ARGS)
     # Save inital data
-    saveData(fname, E, 0, 0, zinit)
+    saveData(fname, E, 0, zinit)
     # Simulate the whole thing
     simulate(E, p, zinit, fname, numSaves)
 end
