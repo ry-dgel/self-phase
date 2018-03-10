@@ -6,7 +6,7 @@ class fiber_set:
         self.runs = []
         for root, folders, files, in os.walk(data_folder):
             for folder in folders:
-                print("Loading data from %s" % folder, end='r')
+                print("Loading data from %s" % folder, end='\r')
                 data_folder = os.path.join(root, folder)
                 self.runs.append(fiber_run.fiber_run(data_folder))
 
@@ -21,4 +21,7 @@ class fiber_set:
                              run.metrics[metric] == minimum)
 
     def constparam(self, param, value):
-        return [run for run in self.runs if self.runs.params[param] == value]
+        fibs = fiber_set()
+        fibs.runs = [run for run in self.runs if 
+                     self.runs.params[param] == value]
+        return fibs
