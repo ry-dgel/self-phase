@@ -11,7 +11,7 @@ view params.yaml for example of parameter file
 * ~~Translate Main Loop~~
 * ~~Translate "PPT.m"~~
 * ~~Turn chunks of main loop into functions~~
-* Optimize
-* Test
+* Optimize (This will never be crossed out)
+* ~~Test~~
 * ~~Use plan fft/ifft to speed up all the transforms~~
 * ~~Multi-Thread drifting~~
