@@ -88,15 +88,17 @@ ax4.plot(f*1e-12,(If/max(If))[::-1],
          #color=plt.cm.viridis(c))
          )
 re, im = data_list[1].T
-Ef = np.fft.fftshift(np.fft.fft(np.fft.fftshift(re+im*1j)))
+Ef = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(re+im*1j)))
 re = np.real(Ef)
 im = np.imag(Ef)
 If = (np.power(re,2) + np.power(im,2))
+print(len(If))
+print(len(If_init))
 ax2.plot(f*1e-12,If/max(If),
          #color=plt.cm.viridis(c))
          )
 # THIS IS DIRTY, FIX THIS WHEN YOU'RE LESS LAZY
-ax4.plot(f*1e-12, If_finl/max(If_finl))
+ax4.plot(f*1e-12, np.roll(If_finl/max(If_finl),0))
 ax2.plot(f*1e-12, If_init/max(If_init))
 ax2.set_xlim(np.array([-60,60]) + 299792458/p["lambda"]*1e-12)
 ax2.set_title("Pulse Spectrum")
