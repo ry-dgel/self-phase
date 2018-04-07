@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import fiber_set as fs
 
+cf = 6.626e-34 * 6.242e18  #converts frequency in Hz to energy in eV using h
+
 def frame_pulse(fiber_set, plist=[], mlist=[]):
     # Make time axis
     Nt = fiber_set.runs[0].params["Nt"]
@@ -41,7 +43,7 @@ def frame_spectra(fiber_set, plist=[], mlist=[]):
     dic = {} 
     # Concat fields together to make intensity column
     I = np.concatenate(list(map(lambda spectrum: np.power(np.abs(spectrum),2),
-                           [run.spectra()[-1] for run in fiber_set.runs])))
+                           [cf*run.spectra()[-1] for run in fiber_set.runs])))
     dic.update({"f": f, "I" : I})
 
     #Make extra columns given by plist and mlist.
