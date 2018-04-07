@@ -30,15 +30,19 @@ class fiber_run:
                 self.params[key] = float(val)
 
         self.metrics = metrics.populate_metrics(self, fname)
-        fix_units(self)
+        self.fix_units()
     
     # Returns a list of the spectra corresponding to each field
     def spectra(self):
-        return [fft.fftshift(fft.fft(fft.fftshift(field))) for 
-                field in self.fields]
+        return [norm_spectra(field) for field in self.fields]
 
     def fix_units(self):
         self.params['lambda'] = self.params['lambda']*1e9
         self.params['Energy'] = self.params['Energy']*1e6
         self.params['Tfwhm'] = self.params['Tfwhm']*1e15
         self.params['tmax'] = self.params['tmax']*1e15
+
+def norm_spectra(field):
+    transform = np.power(np.abs(fft.fftshift(fft.fft(fft.fftshift(field)))),2)
+    return transform/np.max(transform)
+

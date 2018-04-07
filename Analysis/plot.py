@@ -37,13 +37,13 @@ def frame_spectra(fiber_set, plist=[], mlist=[]):
     Nt = fiber_set.runs[0].params["Nt"]
     tmax = fiber_set.runs[0].params["tmax"]
     points = np.arange(-Nt/2, Nt/2+1, 1)
-    f = np.concatenate([points/tmax + 299792458/run.params["lambda"] 
+    # lambda is in nm so speed of light needs to be in nm/s
+    f = np.concatenate([cf*(1e15*points/tmax + 299792458e9/run.params["lambda"]) 
                         for run in fiber_set.runs])
 
     dic = {} 
     # Concat fields together to make intensity column
-    I = np.concatenate(list(map(lambda spectrum: np.power(np.abs(spectrum),2),
-                           [cf*run.spectra()[-1] for run in fiber_set.runs])))
+    I = np.concatenate([run.spectra()[-1] for run in fiber_set.runs])
     dic.update({"f": f, "I" : I})
 
     #Make extra columns given by plist and mlist.
@@ -60,13 +60,13 @@ def frame_full_spectra(fiber_set, plist=[], mlist=[]):
     Nt = fiber_set.runs[0].params["Nt"]
     tmax = fiber_set.runs[0].params["tmax"]
     points = np.arange(-Nt/2, Nt/2, 1)
-
-    f = np.concatenate([np.repeat(points/tmax + 299792458/run.params["lambda"],
+    
+    # lambda is in nm so speed of light needs to be in nm/s
+    f = np.concatenate([np.repeat(cf*(points/tmax + 299792458e9/run.params["lambda"]),
                                   len(run.fields)) 
                         for run in fiber_set.runs])
 
-    I = np.concatenate([np.concatenate([np.power(np.abs(spectrum), 2) 
-                                        for spectrum in run.spectra()]) 
+    I = np.concatenate([np.concatenate([run.spectra()[-1]]) 
                         for run in fiber_set.runs])
 
     dic = {"f" : f, "I" : I}
@@ -105,7 +105,7 @@ def plot_spect_grid(fiber_set, p1, p2=None):
     xmin = 0.95 * df["l_edge"].min(axis=0)
     xmax = 1.05 * df["r_edge"].max(axis=0)
     ymin = 0
-    ymax = 1.1 * df["I"].max(axis=0)
+    ymax = 1.1
     g.map(plt.plot, "f", "I")
     g.set(xlim=(xmin, xmax))
     g.set(ylim=(ymin, ymax))

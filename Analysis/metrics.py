@@ -1,6 +1,8 @@
 import numpy as np
 from numpy import fft as f 
 
+cf = 6.626e-34 * 6.242e18
+
 # Given a fiber_run, computes each metric putting it in fiber_run.metrics
 def populate_metrics(fiber_run, fname):
     params = fiber_run.params
@@ -24,7 +26,7 @@ def bandwidth(params, E):
     If = np.power(np.abs(Ef),2)
 
     freq = np.arange(-params["Nt"]/2, params["Nt"]/2, 1)/params["tmax"]
-    freq = freq + 299792458/params["lambda"]
+    freq = cf * (freq + 299792458/params["lambda"])
 
     tm = 0.1*max(If)
     right_edge = freq[len(If)-np.argmax(np.flip(If,0) > tm)]
