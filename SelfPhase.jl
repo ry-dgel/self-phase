@@ -1,5 +1,6 @@
 module SelfPhase
 export derive_constants, simulate, initialize, saveData
+
 using Dierckx
 using SpecialFunctions.dawson
 using Base.Filesystem

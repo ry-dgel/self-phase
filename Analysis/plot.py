@@ -55,35 +55,6 @@ def frame_spectra(fiber_set, plist=[], mlist=[]):
                 for metric in mlist})
     return pd.DataFrame(dic)
 
-def frame_full_spectra(fiber_set, plist=[], mlist=[]):
-    # Make freq axis
-    Nt = fiber_set.runs[0].params["Nt"]
-    tmax = fiber_set.runs[0].params["tmax"]
-    points = np.arange(-Nt/2, Nt/2, 1)
-    
-    # lambda is in nm so speed of light needs to be in nm/s
-    f = np.concatenate([np.repeat(cf*(points/tmax + 299792458e9/run.params["lambda"]),
-                                  len(run.fields)) 
-                        for run in fiber_set.runs])
-
-    I = np.concatenate([np.concatenate([run.spectra()[-1]]) 
-                        for run in fiber_set.runs])
-
-    dic = {"f" : f, "I" : I}
-
-    #Make columns given by plist and mlist.
-    dic.update({param : np.concatenate([np.repeat(run.params[param], 
-                                                  len(run.fields[-1] * len(run.fields))) 
-                                   for run in fiber_set.runs]) 
-                for param in plist})
-
-    dic.update({metric : np.concatenate([np.repeat(run.metrics[metric], 
-                                                   len(run.fields[-1] * len(run.fields)))
-                                    for run in fiber_set.runs])
-                for metric in mlist})
-
-    return dic
-
 def frame(fiber_set, plist, mlist):
     dic = {}
 
