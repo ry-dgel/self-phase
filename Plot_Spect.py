@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 font = {'family' : 'normal',
-        'weight' : 'bold',
         'size'   : 22}
 
 matplotlib.rc('font', **font)
@@ -52,7 +51,7 @@ X, Y = np.meshgrid(np.linspace(0,2.5, len(data_list)), wl[wl < 1200])
 data_list = [norm_spectrum(data_set) for data_set in data_list]
 data_list = [spectrum[np.where(f>0)] for spectrum in data_list]
 data_list = [spectrum[np.where(wl<1200)] for spectrum in data_list]
-data_list = [spectrum * 1239.84193/np.power(ev[np.where(wl<1200)],2) for spectrum in data_list]
+data_list = [spectrum * np.power(ev[np.where(wl<1200)],2)/1239.84193 for spectrum in data_list]
 spectra = np.array([[spectrum] for spectrum in data_list])[:,0,:]
 fig, ax = plt.subplots(1)
 plt.pcolormesh(X, Y, spectra.T, figure=fig, cmap="plasma")
