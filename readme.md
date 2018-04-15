@@ -8,7 +8,7 @@ julia -p <number of sims to run at once/cores to use> multi-thread.jl <Parameter
 ## Parameters
 Parameters are input as either single numbers, or a triplet defining a range.
 In both cases, the parameter must be surrounded by square brackets '[]'.
-Ranges are given as [<min value>, <max value>, <step size>].
+Ranges are given as [\<min value\>, \<max value\>, \<step size\>].
 
 All parameters in the following list must be defined, and no others are available:
 * Energy  -  The total energy of the laser pulse in Joules.
@@ -41,11 +41,13 @@ fibs = fs.load(<path/to/data>)
 This will load in the data set, and for each one, load in or compute some useful 
 metrics:
 * pwidth - Full-width half-maximum of pulse in femtoseconds.
-* bwidth - Full-width tenth-maximum of pulse spectrum in Hertz.
-* l_edge - Leftmost edge used to calculate bwidth in Hertz. 
-* r_edge - Rightmost edge used to calculate bwidth in Hertz.
-* rho_max - Maximum plasma density during simulation in ions/cubic centimeter.
+* bwidth - Full-width tenth-maximum of pulse spectrum in nm.
+* l_edge - Leftmost edge used to calculate bwidth in nm
+* r_edge - Rightmost edge used to calculate bwidth in nm
+* rho_max - Maximum plasma density during simulation in ions/cubic milimeter.
 * power - Ratio of final power to initial power.
+
+The parameters will also be loaded in, and for ease of use, converted to typically used orders of magnitude.
 
 ## Todo
 * ~~Translate Main Loop~~
