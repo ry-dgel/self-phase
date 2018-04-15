@@ -4,59 +4,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 import fiber_set as fs
 
-cf = 6.626e-34 * 6.242e18  #converts frequency in Hz to energy in eV using h
-
-def frame_pulse(fiber_set, plist=[], mlist=[]):
-    # Make time axis
-    Nt = fiber_set.runs[0].params["Nt"]
-    tmax = fiber_set.runs[0].params["tmax"] 
-    dt = tmax/Nt
-    points = np.arange(-Nt/2, Nt/2, 1)
-    t = points*dt
-
-    dic = {} 
-    # Repeat time axis for every run to make time column
-    t = np.repeat(t, len(fiber_set.runs))
-    # Concat fields together to make intensity column
-    I = np.concatenate(list(map(lambda field: np.power(np.abs(field),2),
-                           [run.fields[-1] for run in fiber_set.runs])))
-    dic.update({"t": t, "I" : I})
-
-    #Make extra columns given by plist and mlist.
-    dic.update({param : np.concatenate([np.repeat(run.params[param], len(run.fields[-1])) 
-                                   for run in fiber_set.runs]) 
-                for param in plist})
-    dic.update({metric : np.concatenate([np.repeat(run.metrics[metric], len(run.fields[-1]))
-                                    for run in fiber_set.runs])
-                for metric in mlist})
-    return pd.DataFrame(dic)
-
+hbar_evpj = 6.626e-34 * 6.242e18  # Convert Hz to eV
+hc = 1239.84193 # Convert eV to nm
 
 def frame_spectra(fiber_set, plist=[], mlist=[]):
-    # Make freq axis
-    Nt = fiber_set.runs[0].params["Nt"]
-    tmax = fiber_set.runs[0].params["tmax"]
-    points = np.arange(-Nt/2, Nt/2+1, 1)
-    # lambda is in nm so speed of light needs to be in nm/s
-    f = np.concatenate([cf*(1e15*points/tmax + 299792458e9/run.params["lambda"]) 
-                        for run in fiber_set.runs])
-
-    dic = {} 
-    # Concat fields together to make intensity column
-    I = np.concatenate([run.spectra()[-1] for run in fiber_set.runs])
-    dic.update({"f": f, "I" : I})
+    wl = fiber_set.runs[0].make_wavelength_scale()
+    wl_length = len(wl)
+    wl = np.tile(wl, len(fiber_set.runs))
+    I = np.concatenate([run.apply_jacob(normed = True)[-1] for run in fiber_set.runs])
+    dic = {"wl": wl, "I" : I}
 
     #Make extra columns given by plist and mlist.
-    dic.update({param : np.concatenate([np.repeat(run.params[param], len(run.fields[-1])) 
+    dic.update({param : np.concatenate([np.repeat(run.params[param], wl_length) 
                                    for run in fiber_set.runs]) 
                 for param in plist})
-    dic.update({metric : np.concatenate([np.repeat(run.metrics[metric], len(run.fields[-1]))
+    dic.update({metric : np.concatenate([np.repeat(run.metrics[metric], wl_length)
                                     for run in fiber_set.runs])
                 for metric in mlist})
+
     return pd.DataFrame(dic)
 
-def frame(fiber_set, plist, mlist):
-    dic = {}
+def frame_full_spectra(fiber_run):
+    wl = fiber_run.make_wavelength_scale()
+    Is = fiber_run.apply_jacob(normed = True)
+    z = np.linspace(0, np.run.params["zmax"], len(fiber_run.fields))
+    dic = {"wl" : np.tile(wl, len(fiber_run)), "I" : np.concatenate(Is)}
+    return pd.DataFrame(dic)
+
+
+def frame_pulse(fiber_set, plist, mlist):
+    t = np.tile(fiber_set.runs[0].make_time_scale(), len(fiber.set.runs))
+    I = np.concatenate([np.power(np.abs(run.fields[-1]),2) for run in fiber_set.runs])
+    dic = {"t": t, "I" : I}
 
     #Make columns given by plist and mlist.
     dic.update({param : [run.params[param] for run in fiber_set.runs]
@@ -64,6 +43,15 @@ def frame(fiber_set, plist, mlist):
     dic.update({metric : [run.metrics[metric] for run in fiber_set.runs]
                 for metric in mlist})
 
+    return pd.DataFrame(dic)
+
+def frame(fiber_set, plist, mlist):
+    dic = {}
+    #Make columns given by plist and mlist.
+    dic.update({param : [run.params[param] for run in fiber_set.runs]
+                for param in plist})
+    dic.update({metric : [run.metrics[metric] for run in fiber_set.runs]
+                for metric in mlist})
     return pd.DataFrame(dic)
 
 def plot_spect_grid(fiber_set, p1, p2=None):
@@ -77,12 +65,23 @@ def plot_spect_grid(fiber_set, p1, p2=None):
     xmax = 1.05 * df["r_edge"].max(axis=0)
     ymin = 0
     ymax = 1.1
-    g.map(plt.plot, "f", "I")
+    g.map(plt.plot, "wl", "I")
     g.set(xlim=(xmin, xmax))
     g.set(ylim=(ymin, ymax))
     return g
 
+def plot_full_spectrum(fiber_run):
+    wl = fiber_run.make_wavelength_scale()
+    Is = np.array(fiber_run.apply_jacob(normed = True))
+    z = np.linspace(0, fiber_run.params["zmax"], len(fiber_run.fields))
+    X, Y = np.meshgrid(z, wl)
+    fig, ax = plt.subplots(1)
+    ax.pcolormesh(X, Y, Is.T, figure=fig, cmap="inferno")
+    ax.set_ylim(fiber_run.metrics["l_edge"] * 0.95,fiber_run.metrics["r_edge"] * 1.05)
+    ax.set_xlabel("Propagation Length (m)")
+    ax.set_ylabel("Wavelength (nm)")
+    return ax
+
 def metric_heatmap(fiber_set, p1, p2, metric):
     df = frame(fiber_set, plist=[p1,p2], mlist=[metric]).pivot(p1, p2, metric)
     return sns.heatmap(df)
-

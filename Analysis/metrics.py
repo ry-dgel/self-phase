@@ -6,7 +6,8 @@ cf = 6.626e-34 * 6.242e18
 # Given a fiber_run, computes each metric putting it in fiber_run.metrics
 def populate_metrics(fiber_run, fname):
     params = fiber_run.params
-    bw = bandwidth(params, fiber_run.fields[-1])
+    bw = bandwidth(fiber_run)
+    print(bw)
     pw = pulse_width(params, fiber_run.fields[-1])
     pr = power_ratio(fiber_run.fields[-1], fiber_run.fields[0])
     rho_max = plas_denzel(fname)
@@ -20,17 +21,19 @@ def plas_denzel(fname):
     rho_max = max(plas_denzel)
     return rho_max	
 
-# Computes the FWTM bandwidth of the final field
-def bandwidth(params, E):
-    Ef = f.fftshift(f.fft(f.fftshift(E)))
-    If = np.power(np.abs(Ef),2)
+# Computes the FWTM bandwidth of the final field in nm
+def bandwidth(fiber_run):
+    wl = fiber_run.make_wavelength_scale() 
+    spectrum = fiber_run.apply_jacob(True)[-1]
 
-    freq = np.arange(-params["Nt"]/2, params["Nt"]/2, 1)/params["tmax"]
-    freq = cf * (freq + 299792458/params["lambda"])
-
-    tm = 0.1*max(If)
-    right_edge = freq[len(If)-np.argmax(np.flip(If,0) > tm)]
-    left_edge = freq[np.argmax(If > tm)]
+    # 0.1 since looking for FWTM of a normalized spectrum
+    # made to be 0.0995 for a little leeway in rounding.
+    lmin = min(np.where(spectrum >= 0.0995)[0])
+    rmin = min(np.where(np.flip(spectrum,0) >= 0.0995)[0])
+    
+    # Probably over shot 0.1 by a bit, so take average with previous wl
+    left_edge = np.mean(np.flip(wl,0)[rmin-1:rmin])
+    right_edge = np.mean(wl[lmin-1:lmin])
     bw = right_edge - left_edge
     return [bw, left_edge, right_edge]
 
