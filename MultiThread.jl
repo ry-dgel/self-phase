@@ -22,8 +22,8 @@ the entire simulation with those parameters.
 =#
 @everywhere function unpack(p, numSaves)
     # Generate folder string
-    fname = @sprintf("%.0fnm_%.0fμJ_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
-                     p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Tfwhm"]*1E15,
+    fname = @sprintf("%.0fnm_%.0fμJ_%.2fbar_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
+                     p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Pout"], p["Tfwhm"]*1E15,
                      p["zmax"], p["Chirp"], p["fiberD"]*1E6)
     # Derive additional constants and spatial grids
     derive_constants(p)
