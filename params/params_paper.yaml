@@ -1,23 +1,11 @@
-<<<<<<< HEAD
 Energy:     [80E-9, 120E-9, 10E-9]
 Tfwhm:      [80E-15, 110E-15, 10E-15]
 lambda:     [450E-9, 600E-9, 15E-9]
-=======
-Energy:     [580E-6]
-Tfwhm:      [130E-15]
-lambda:     [800E-9]
->>>>>>> c30ce81a86e3e7b5dcf7da3425b839a1b58a2c51
 dz:         [2E-3]
 zmax:       [2.5]
 Nt:         [16384]
 tmax:       [1200E-15]
 Pin:        [0.008]
-<<<<<<< HEAD
-Pout:       [2.00, 3.00, 0.5]
-Chirp:      [0]
-fiberD:     [270E-6, 400E-6, 130E-6]
-=======
 Pout:       [3.00]
 Chirp:      [0]
-fiberD:     [400E-6]
->>>>>>> c30ce81a86e3e7b5dcf7da3425b839a1b58a2c51
+fiberD:     [270E-6, 400E-6, 130E-6]
