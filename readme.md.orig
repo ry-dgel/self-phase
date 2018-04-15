@@ -57,9 +57,7 @@ The parameters will also be loaded in, and for ease of use, converted to typical
 * ~~Test~~
 * ~~Use plan fft/ifft to speed up all the transforms~~
 * ~~Multi-Thread drifting~~
-<<<<<<< HEAD
 
 ## Citations
 Original code adapted from  
 =======
->>>>>>> c30ce81a86e3e7b5dcf7da3425b839a1b58a2c51
