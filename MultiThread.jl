@@ -62,7 +62,12 @@ end
 # Put all processes in same place.
 @everywhere cd("data")
 
-numSaves = parse(Int, ARGS[2])
+if length(ARGS) < 2
+    println("No number of saves passed, assuming 2.")
+    numSaves = 2
+else
+    numSaves = parse(Int, ARGS[2])
+end
 
 # Parallel map over all paramters to simulate!
 pmap(jawn -> unpack(Dict{Any,Any}(zip(keys(lists), jawn)), numSaves), param_tuples)

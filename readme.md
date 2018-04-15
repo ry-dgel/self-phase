@@ -1,5 +1,5 @@
 # Self-Phase Modulation
-## Code for simulation to be translated from matlab -> julia
+## Code for simulation of SPM on laser pulses through hollow optical fibers from matlab -> julia
 Done by Rigel and Joseph as part of undergraduate thesis.
 
 ```
@@ -57,3 +57,6 @@ The parameters will also be loaded in, and for ease of use, converted to typical
 * ~~Test~~
 * ~~Use plan fft/ifft to speed up all the transforms~~
 * ~~Multi-Thread drifting~~
+
+## Citations
+Original code adapted from  
