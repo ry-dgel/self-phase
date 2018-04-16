@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import fiber_set as fs
 
-font = {'family' : 'normal',
-        'size'   : 28}
+font = {'size'   : 28}
 
 matplotlib.rc('font', **font)
 

@@ -51,7 +51,7 @@ def bandwidth_ev(fiber_run):
     right_edge = np.mean(np.flip(ev,0)[rmin-1:rmin])
     left_edge = np.mean(ev[lmin-1:lmin])
     bw = right_edge - left_edge
-    return bw
+    return bw * 10**3
 
 # Computes the FWHM pulse width of the final field
 def pulse_width(params, E):
