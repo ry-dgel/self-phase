@@ -7,11 +7,12 @@ cf = 6.626e-34 * 6.242e18
 def populate_metrics(fiber_run, fname):
     params = fiber_run.params
     bw = bandwidth(fiber_run)
-    print(bw)
+    # bandwidth in meV
+    bw_ev = bandwidth_ev(fiber_run) * 1E-3
     pw = pulse_width(params, fiber_run.fields[-1])
     pr = power_ratio(fiber_run.fields[-1], fiber_run.fields[0])
     rho_max = plas_denzel(fname)
-    metrics = {"pwidth":pw, "bwidth":bw[0], "l_edge":bw[1], "r_edge":bw[2],
+    metrics = {"pwidth":pw, "bwidth":bw[0], "bwidth_ev":bw_ev, "l_edge":bw[1], "r_edge":bw[2],
                 "rho_max":rho_max, "power":pr}
     return metrics
 
@@ -36,6 +37,21 @@ def bandwidth(fiber_run):
     right_edge = np.mean(wl[lmin-1:lmin])
     bw = right_edge - left_edge
     return [bw, left_edge, right_edge]
+
+def bandwidth_ev(fiber_run):
+    ev = fiber_run.make_energy_scale()
+    spectrum = fiber_run.apply_jacob(True)[-1]
+
+    # 0.1 since looking for FWTM of a normalized spectrum
+    # made to be 0.0995 for a little leeway in rounding.
+    lmin = min(np.where(spectrum >= 0.0995)[0])
+    rmin = min(np.where(np.flip(spectrum,0) >= 0.0995)[0])
+    
+    # Probably over shot 0.1 by a bit, so take average with previous wl
+    right_edge = np.mean(np.flip(ev,0)[rmin-1:rmin])
+    left_edge = np.mean(ev[lmin-1:lmin])
+    bw = right_edge - left_edge
+    return bw
 
 # Computes the FWHM pulse width of the final field
 def pulse_width(params, E):

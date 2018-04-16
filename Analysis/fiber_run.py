@@ -55,8 +55,9 @@ class fiber_run:
         p = fiber_run.params
         # Make freq axis
         Nt = p["Nt"]
-        tmax = p["tmax"]
-        points = np.arange(-Nt/2, Nt/2+1, 1)
+        dt     = p["tmax"]/(Nt-1)        # Time step
+
+        points = np.arange(-Nt/2, Nt/2, 1)
         return points * dt
 
     # Returns the frequency axis associated with the spectra stored in the run.
@@ -66,7 +67,7 @@ class fiber_run:
         # Make freq axis
         Nt = p["Nt"]
         tmax = p["tmax"]
-        points = np.arange(-Nt/2, Nt/2+1, 1)
+        points = np.arange(-Nt/2, Nt/2, 1)
 
         # lambda is in nm so speed of light needs to be in nm/s
         # tmax is in femto seconds, hence 1e15
@@ -93,7 +94,7 @@ class fiber_run:
     def apply_jacob(self, normed = False):
         spectra = self.spectra()
         e = self.make_energy_scale()
-        
+
         spectra = [spectrum[np.where(e >= 0)] for spectrum in spectra]
         e = e[np.where(e >= 0)]
         if normed:
@@ -102,8 +103,15 @@ class fiber_run:
         else:
             return [spectrum * hc/np.power(e,2) for spectrum in spectra]
 
+def flip_spectrum(spectrum, mid_ind):
+        new = np.zeros(np.size(spectrum))
+        for i,_ in enumerate(spectrum):
+            new[i] = spectrum[2*mid_ind - i]
+        return new
+
 def spectrum(field, normed = False):
-    transform = np.power(np.abs(fft.fftshift(fft.fft(fft.fftshift(field)))),2)
+    # Flip field to have something moving in the right direction.
+    transform = np.power(np.abs(fft.fftshift(fft.fft(fft.fftshift(np.flip(field,0))))),2)
     if normed:
         return transform/np.max(transform)
     else:

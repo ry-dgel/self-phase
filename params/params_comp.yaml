@@ -1,4 +1,4 @@
-Energy:     [400E-6, 1600E-6, 400E-6]
+Energy:     [1600E-6]
 Tfwhm:      [100E-15]
 lambda:     [800E-9]
 dz:         [2E-3]

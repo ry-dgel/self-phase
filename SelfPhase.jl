@@ -476,9 +476,7 @@ function simulate(E, p, zinit, fname, num_saves)
     ##################
     # Initialisation #
     ##################
-    # Setting up progress meter
-    #steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
-    #prog = Progress(steps, 0.1)
+    steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
 
     # How often to save data.
     if num_saves > 2
@@ -503,13 +501,8 @@ function simulate(E, p, zinit, fname, num_saves)
 
         E, ρ = simStep(E, p, z, ft, ift)
 
-
         # Update Distance
         z += p["dz"]
-
-        #zstring = @sprintf("%.3f/%.3f m", z, p["zmax"])
-        #denstring = @sprintf("%.9f", maximum(ρ*1E-6))
-        #ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
 
     #Save final data

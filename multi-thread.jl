@@ -1,4 +1,4 @@
-@verywhere include("self-phase.jl")
+@everywhere include("self-phase.jl")
 using YAML
 using Iterators
 #=
@@ -12,10 +12,8 @@ e.g:
 julia multi-thread.jl params.yaml 10
 ```
 """
-
 """
     unpack(p, numSaves)
-
 given a dictionary of inital paremeters, and a number of times to save, performs
 the entire simulation with those parameters.
 """

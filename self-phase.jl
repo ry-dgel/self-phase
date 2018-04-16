@@ -3,7 +3,6 @@ using SpecialFunctions.dawson
 using Base.Filesystem
 using ProgressMeter
 using YAML
-#using Plots
 
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
@@ -20,10 +19,10 @@ BLAS.set_num_threads(nprocs())
 # Fixed Constants #
 ###################
 # Setup constants
-const losses  = 0.13         # Absorption Coef.        1/m
+const losses  = 0.13          # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
-const α       = 7E-13
-const Zeff_Ar = 1
+const α       = 7E-13         # ???
+const Zeff_Ar = 1             # Effective Charge of ionized Argon
 
 # General Physics Constants
 const c  = 299792458        # Speed of light     m/s
@@ -71,18 +70,128 @@ as = [a0,a1,a2,a3,a4,a5,a6,a7]
 ██      ██    ██ ██  ██ ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
 ██       ██████  ██   ████  ██████    ██    ██  ██████  ██   ████ ███████
 =#
+
+#################
+# File Handling #
+#################
+"""
+    saveData(fname, E, ΔT_pulse, z)
+
+Saves all the data to respective files within the folder given by fname
+"""
+function saveData(fname, E, ΔT_pulse, z)
+    open(fname * "/E", "a") do f
+        #write(f, @sprintf("\# z = %f\n", z))
+        for pair in zip(real(E),imag(E))
+            write(f, @sprintf("%.10e,%.10e\n",pair[1],pair[2]))
+        end
+        write(f, "\n")
+    end
+    open(fname * "/Duration", "a") do f
+        write(f, "$(ΔT_pulse)\n")
+    end
+    open(fname * "/z", "w") do f
+        write(f, "$z\n")
+    end
+end
+
+"""
+    loadParams(fname)
+
+Loads the parameters from fname, a yaml file, into a dictionary.
+"""
+function loadParams(fname)
+    p = YAML.load(open(fname))
+
+    # We use λ in the code, so replace the key by removing the value and reinserting it
+    if haskey(p, "lambda")
+        merge!(p, Dict("λ" => pop!(p, "lambda")))
+    end
+
+    # Derive additional constants
+    derive_constants(p)
+    return p
+end
+
+"""
+    saveParams(fname, p)
+
+Saves the important parameters from a dictionary into a file given by fname.
+"""
+function saveParams(fname, p)
+    open("$fname/params", "w") do f
+        write(f, @sprintf("Energy:    %dE-6\n",  p["Energy"]*1E6))
+        write(f, @sprintf("Tfwhm:     %dE-15\n", p["Tfwhm"]*1E15))
+        write(f, @sprintf("lambda:    %dE-9\n",  p["λ"]*1E9))
+        write(f, @sprintf("dz:        %s\n",     p["dz"]))
+        write(f, @sprintf("zmax:      %s\n",     p["zmax"]))
+        write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
+        write(f, @sprintf("tmax:      %.1e\n",   p["tmax"]))
+        write(f, @sprintf("Pin:       %d\n",     p["Pin"]))
+        write(f, @sprintf("Pout:      %d\n",     p["Pout"]))
+        write(f, @sprintf("fiberD:    %dE-6\n",  p["fiberD"]*1E6))
+        if haskey(p, "Chrip")
+            write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
+        end
+        if haskey(p, "TOD")
+            write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
+        end
+    end
+end
+
+"""
+    initialize(fname, p, resume, keep)
+
+Initializes a simulation given a folder name that may or may not already contain
+data. Folder name should be relevant to the paramters in p. If resume is true,
+will attempt to continue a simulaiton. If keep is true, will not overwrite old
+data already present in folder given by fname.
+"""
+function initialize(fname, p, resume, keep)
+    zinit = 0
+    if fname ∈ readdir()
+        if resume
+            zinit = float(read("$fname/z"))
+            E[:] = readcsv("$fname/E")[end][:]
+        else
+            if keep
+                i = 2
+                while fname*"_($i)" ∈ readdir()
+                    i += 1
+                end
+                fname = fname*"_($i)"
+            else
+                rm(fname, recursive=true)
+            end
+            mkdir(fname)
+            E = initField(p)
+            saveParams(fname, p)
+        end
+    else
+        mkdir(fname)
+        E = initField(p)
+        saveParams(fname, p)
+    end
+    return E, zinit
+end
+
 #######################
 # Handling Parameters #
 #######################
+"""
+    derive_constants(p)
+
+Adds several concrete values and vectors to the parameter dictionary.
+"""
 function derive_constants(p)
     f      = c / p["λ"]                 # Pulse Frequency Hz
     ω      = 2*pi*f                       # Pulse Angular Frequency
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
     Power  = sqrt(2/pi) * p["Energy"]/σ_t # Max power delivered by pulse
 
-    dt     = p["tmax"]/(p["Nt"]-1)        # Time step
-    points = (-p["Nt"]/2:1:p["Nt"]/2-1)
-    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2-1)*dt  # Time grid iterator
+    dt     = p["tmax"]/(p["Nt"])        # Time step
+    points = (-p["Nt"]/2:1:p["Nt"]/2)
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
 
     ff     = points./p["tmax"]            # Frequency grid
     ωω     = (2*pi)*ff                    # Angular frequency grid
@@ -119,7 +228,7 @@ function derive_constants(p)
         "ff"      => ff,
         "ωω"      => ωω,
 
-        "λ_tot"   => λ_tot,
+        s"λ_tot"   => λ_tot,
         "ωω_tot"  => ωω_tot,
         "λ_max"   => λ_max,
         "λ_min"   => λ_min,
@@ -135,31 +244,52 @@ end
 ######################
 # Simulation Helpers #
 ######################
+"""
+    initField(p)
+
+Returns a vector representing an electric field defined in terms of the
+peak power and spread of the intial gaussian pulse. Can also handle
+Chipr and TOD. All paramters read from dictionary p.
+"""
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
     E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
     E             = E0 .* E
 
-    Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 + get(p, "TOD", 0) .* p["ωω"] .^ 3
-    Chirp_function = 0
+    Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 +
+                     get(p, "TOD", 0) .* p["ωω"] .^ 3
 	E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
     E              = ifftshift(ifft(ifftshift(E_TF)))
-
-    #Clear vars
-    #Chirp_function = nothing; E_TF = nothing; gc()
 end
 
+"""
+    calc_pressure(p_in, p_out, z, zmax)
+
+Computes the pressure at a point z along a linear pressure gradient.
+"""
 function calc_pressure(p_in, p_out, z, zmax) #tested
     #Calculate pressure along fiber
     return sqrt(p_in^2 + (z/zmax) * (p_out^2-p_in^2))
 end
 
+"""
+    calc_duration(E, t1)
+
+Computes the FHWM of a gaussian peak, doesn't appear to work properly.
+"""
 function calc_duration(E, t1) #tested
     center_pulse = sum(t1.*(abs2.(E)))/sum(abs2.(E))
     return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs2.(E))
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
+"""
+    prop_lin(p, E, deriv_t_2, losses, ft, ift)
+
+Computes the linear evoltion of a field E. deriv_t_2 is computed in sim step.
+ft and ift are pre-planned FFT matrices for forward and reverse FT. losses is
+the absorption coeff of the fiber.
+"""
 function prop_lin(p, E, deriv_t_2, losses, ft, ift) #tested
     # Shift to frequency domain and compute linear propagation
     E_TF = fftshift(ft * (fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz"])
@@ -167,10 +297,21 @@ function prop_lin(p, E, deriv_t_2, losses, ft, ift) #tested
     return ifftshift(ift * (ifftshift(E_TF))).*exp.(-losses/2 * p["dz"])
 end
 
-function prop_non_lin(p,E, rrr, ρ, losses, kerr_response) #tested
+"""
+    prop_non_lin(p, E, rrr, ρ, losses, kerr_response)
+
+Computes the nonlinear evolution of a field E. rrr, ρ, losses and kerr_response
+all computed in main.
+"""
+function prop_non_lin(p, E, rrr, ρ, losses, kerr_response) #tested
     return E.*exp.(rrr.*ρ*p["dz"] - losses + kerr_response)
 end
 
+"""
+    smooth(values, radius)
+
+Smooths a vector by averaging all values within radius of each element.
+"""
 function smooth(values, radius)
     smoothed_values = zeros(values)
     for i in eachindex(values)
@@ -180,6 +321,11 @@ function smooth(values, radius)
     return smoothed_values
 end
 
+"""
+    NL_response(p, E, γs)
+
+Computes the electric field brought on by steepening.
+"""
 function NL_response(p, E, γs)
     #=
     Functionized version of the repeated code in steppening.m
@@ -190,11 +336,21 @@ function NL_response(p, E, γs)
            ((circshift(Temp,1) - circshift(Temp,-1))/(2 * p["dt"]))
 end
 
+"""
+    steepening(p, E, γs)
+
+Computes the evoltion of field E due to steepening.
+"""
 function steepening(p, E, γs) #Tested
     Etemp = E + (0.5 * NL_response(p, E, γs))
     return E + NL_response(p, Etemp, γs)
 end
 
+"""
+    calc_ks(p, n_tot)
+
+Computes the kerr coefficients for a given frequency.
+"""
 function calc_ks(p, n_tot) #tested
     # Interpolation of n
     n_interp = Spline1D(p["ωω_tot"], n_tot,k=4)
@@ -221,6 +377,12 @@ function calc_ks(p, n_tot) #tested
     return k_tot, [k,k1,k2,k3,k4]
 end
 
+"""
+    calc_ns(pressure, n, n_tot, λ_tot)
+
+Computes the index of refraction for a given pressure along the entire frequency
+range.
+"""
 function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n2_800  = 1e-23   * pressure
     n4_800  =-3.7e-42 * pressure
@@ -238,6 +400,11 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     return [n,n2,n4,n6,n8,n10]
 end
 
+"""
+    plasma_potential(E, p, Ui)
+
+Computes the chance of ionization based off of PPT theory.
+"""
 function plasma_potential(E,p,Ui) #Tested
     """
     Derived From PPT Theory
@@ -277,40 +444,63 @@ function plasma_potential(E,p,Ui) #Tested
     return potential
 end
 
+"""
+    plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2)
+
+Computes the plasma density along the pulse.
+"""
 function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
     for i in 1:(p["Nt"]-1)
         ρ_Ar[i+1] = ρ_Ar[i] +
-                    p["dt"] * (-α*ρ_Ar[i]^2+Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
-                    (coeff2 * abs(E[i])^2)*ρ_Ar[i])
+                    p["dt"] * (-α*ρ_Ar[i]^2 + Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
+                               (coeff2 * abs(E[i])^2)*ρ_Ar[i])
     end
     return ρ_Ar
 end
 
-function simulate(E, p, zinit, fname)
+"""
+    simulate(E, p, zinit, fname, num_saves)
+
+Performs the full simuation of a pulse propagating. Saves results to fname. Will
+save num_saves times with even propagation length between saves.
+"""
+function simulate(E, p, zinit, fname, num_saves)
 
     ##################
     # Initialisation #
     ##################
-    #Setting up progress meter
+    # Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
     prog = Progress(steps, 0.1)
-    save_every = 25
+
+    # How often to save data.
+    if num_saves > 2
+        save_every = ceil((steps-1)/((num_saves)-2))
+    else
+        save_every = Inf
+    end
+
     #Plan FFT
     ft  = plan_fft(E)
     ift = plan_ifft(E)
 
     # Propagation variables
-    z             = zinit
-
+    z = zinit
+    ρ = 0
     while z < p["zmax"]
-        E, ρ = simStep(E, p, z, ft, ift)
-
         if (round(z/p["dz"])%save_every == 0)
-            # Asynchronously write' data.
-            @async saveData(fname, E, maximum(ρ*1E-6),
+            # Async data write
+            @async saveData(fname, E,
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
+        ρ_max = maximum(ρ*1E-6)
+        @async open(fname * "/PlasmaDensity", "a") do f
+            write(f, "$(ρ_max)\n")
+        end
+
+        E, ρ = simStep(E, p, z, ft, ift)
+
 
         # Update Distance
         z += p["dz"]
@@ -319,8 +509,16 @@ function simulate(E, p, zinit, fname)
         denstring = @sprintf("%.9f", maximum(ρ*1E-6))
         ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
+
+    #Save final data
+    saveData(fname, E, calc_duration(E,p["t_vec"]*p["dt"]), z)
 end
 
+"""
+    simStep(E, p, z, ft, ift)
+
+Performs a single split time step of the simulation.
+"""
 function simStep(E, p, z, ft, ift)
     # Calculate Pressure
     pressure_z = calc_pressure(p["Pin"], p["Pout"], z, p["zmax"])
@@ -338,16 +536,16 @@ function simStep(E, p, z, ft, ift)
 
     # Argon Parameters
     ns = calc_ns(pressure_z, n, n_tot, p["λ_tot"])
-    β2 = pressure_z * ks[3]
-    β3 = pressure_z * ks[4]
-    β4 = pressure_z * ks[5]
+    #β2 = pressure_z * ks[3]
+    #β3 = pressure_z * ks[4]
+    #β4 = pressure_z * ks[5]
     τ = 3.5E-13 / pressure_z
     ρ_at = pressure_z * 1E5 / (Kb * T)
 
     # Plasma Parameters
     σ_k = 2.81E-96 * p["Pout"]
     σ   = (ks[1]*ee^2) ./ (p["ω"] * me * ϵ0) .* τ./(1+(p["ω"] * τ).^2)
-    β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
+    #β_k = 10.^(-4 * p["k_Ar"]) .* p["k_Ar"] * ħ .* p["ω"] * ρ_at * 0.21 * σ_k
     rrr = -im * ks[1]./(2 * n[1]^2 * p["ρ_crit"]) - 0.5 * σ
     coeff2 = σ/Ui_Ar
 
@@ -358,10 +556,10 @@ function simStep(E, p, z, ft, ift)
     γs = im * ns[2:end] * ks[1]/n[1]
 
     # Propagation
-    E = prop_lin(p, E, dv_t_2_op, losses, ft, ift)    #Linear
+    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
     E = steepening(p, E, γs)                          #Steepening
 
-    # Plasma
+   # Plasma
     U_ion = plasma_potential(E, p, Ui_Ar)
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
     plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
@@ -375,107 +573,3 @@ function simStep(E, p, z, ft, ift)
 
     return E, ρ
 end
-
-#################
-# File Handling #
-#################
-function saveData(fname, E, ρ_max, ΔT_pulse, z)
-    open(fname * "/E", "a") do f
-        writecsv(f, zip(real(E),imag(E)))
-        write(f, "\n")
-    end
-    open(fname * "/Duration", "a") do f
-        write(f, "$(ΔT_pulse)\n")
-    end
-    open(fname * "/PlasmaDensity", "a") do f
-        write(f, "$(ρ_max)\n")
-    end
-    open(fname * "/z", "w") do f
-        write(f, "$z\n")
-    end
-end
-
-function loadParams(fname)
-    p = YAML.load(open(fname))
-
-    # We use λ in the code, so replace the key by removing the value and reinserting it
-    if haskey(p, "lambda")
-        merge!(p, Dict("λ" => pop!(p, "lambda")))
-    end
-
-    # Derive additional constants
-    derive_constants(p)
-    return p
-end
-
-function saveParams(fname, p)
-    open("$fname/params", "w") do f
-        write(f, @sprintf("Energy:    %dE-6\n",  p["Energy"]*1E6))
-        write(f, @sprintf("Tfwhm:     %dE-15\n", p["Tfwhm"]*1E15))
-        write(f, @sprintf("lambda:    %dE-9\n",  p["λ"]*1E9))
-        write(f, @sprintf("dz:        %s\n",     p["dz"]))
-        write(f, @sprintf("zmax:      %s\n",     p["zmax"]))
-        write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
-        write(f, @sprintf("tmax:      %.1e\n",   p["tmax"]))
-        write(f, @sprintf("Pin:       %d\n",     p["Pin"]))
-        write(f, @sprintf("Pout:      %d\n",     p["Pout"]))
-        write(f, @sprintf("fiberD:    %dE-6\n",  p["fiberD"]*1E6))
-        if haskey(p, "Chrip")
-            write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
-        end
-        if haskey(p, "TOD")
-            write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
-        end
-    end
-end
-
-#=
-███    ███  █████  ██ ███    ██
-████  ████ ██   ██ ██ ████   ██
-██ ████ ██ ███████ ██ ██ ██  ██
-██  ██  ██ ██   ██ ██ ██  ██ ██
-██      ██ ██   ██ ██ ██   ████
-=#
-
-# Saving/Loading Files
-p = loadParams(ARGS[1]) #Read params from filename passed to command
-fname = @sprintf("%.0fnm_%.0fμJ_%.0fbar_%.0ffs_%.1fm",
-                 p["λ"]*1E9, p["Energy"]*1E6, p["Pout"], p["Tfwhm"]*1E15, p["zmax"])
-zinit = 0
-if "data" ∉ readdir()
-    mkdir("data")
-end
-cd("data")
-if fname ∈ readdir()
-    print("Found data for these parameters, load and continue? (y)/n: ")
-    input = readline()
-    if input != "n"
-        zinit = float(read("$fname/z"))
-        E[:] = readcsv("$fname/E")[end][:]
-    else
-        print("Overwrite old data? y/(n): ")
-        input = readline()
-        if input != "y"
-            i = 2
-            while fname*"_($i)" ∈ readdir()
-                i += 1
-            end
-            fname = fname*"_($i)"
-        else
-            rm(fname, recursive=true)
-        end
-        mkdir(fname)
-        E = initField(p)
-        saveParams(fname, p)
-    end
-else
-    mkdir(fname)
-    E = initField(p)
-    saveParams(fname, p)
-end
-cd("..")
-return E
-end
-
-#saveData(fname, E, 0, 0, zinit)
-#simulate(E, p, zinit)

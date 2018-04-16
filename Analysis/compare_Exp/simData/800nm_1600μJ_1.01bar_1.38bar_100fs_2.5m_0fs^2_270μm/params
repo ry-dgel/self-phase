@@ -1,0 +1,10 @@
+Energy:    1600E-6
+Tfwhm:     100E-15
+lambda:    800E-9
+dz:        0.002
+zmax:      2.5
+Nt:        16384
+tmax:      1.2e-12
+Pin:       1
+Pout:      1
+fiberD:    270E-6
