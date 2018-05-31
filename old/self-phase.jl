@@ -1,6 +1,3 @@
-module SelfPhase
-export derive_constants, simulate, initialize, saveData
-
 using Dierckx
 using SpecialFunctions.dawson
 using Base.Filesystem
@@ -192,9 +189,9 @@ function derive_constants(p)
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
     Power  = sqrt(2/pi) * p["Energy"]/σ_t # Max power delivered by pulse
 
-    dt     = p["tmax"]/(p["Nt"]-1)        # Time step
-    points = (-p["Nt"]/2:1:p["Nt"]/2-1)
-    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2-1)*dt  # Time grid iterator
+    dt     = p["tmax"]/(p["Nt"])        # Time step
+    points = (-p["Nt"]/2:1:p["Nt"]/2)
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
 
     ff     = points./p["tmax"]            # Frequency grid
     ωω     = (2*pi)*ff                    # Angular frequency grid
@@ -473,7 +470,9 @@ function simulate(E, p, zinit, fname, num_saves)
     ##################
     # Initialisation #
     ##################
+    # Setting up progress meter
     steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
+    prog = Progress(steps, 0.1)
 
     # How often to save data.
     if num_saves > 2
@@ -495,14 +494,20 @@ function simulate(E, p, zinit, fname, num_saves)
             @async saveData(fname, E,
                             calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
-        open(fname * "/PlasmaDensity", "a") do f
-            write(f, @sprintf("%.5e\n", ρ))
+        ρ_max = maximum(ρ*1E-6)
+        @async open(fname * "/PlasmaDensity", "a") do f
+            write(f, "$(ρ_max)\n")
         end
 
         E, ρ = simStep(E, p, z, ft, ift)
 
+
         # Update Distance
         z += p["dz"]
+
+        zstring = @sprintf("%.3f/%.3f m", z, p["zmax"])
+        denstring = @sprintf("%.9f", maximum(ρ*1E-6))
+        ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
 
     #Save final data
@@ -554,7 +559,7 @@ function simStep(E, p, z, ft, ift)
     E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
     E = steepening(p, E, γs)                          #Steepening
 
-    # Plasma
+   # Plasma
     U_ion = plasma_potential(E, p, Ui_Ar)
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
     plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
@@ -566,8 +571,5 @@ function simStep(E, p, z, ft, ift)
                     γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
 
-    return E, maximum(ρ) * 1E-6
-end
-
-#module
+    return E, ρ
 end

@@ -25,7 +25,7 @@ def plas_denzel(fname):
 # Computes the FWTM bandwidth of the final field in nm
 def bandwidth(fiber_run):
     wl = fiber_run.make_wavelength_scale() 
-    spectrum = fiber_run.apply_jacob(True)[-1]
+    spectrum = fiber_run.last_jacob(True)
 
     # 0.1 since looking for FWTM of a normalized spectrum
     # made to be 0.0995 for a little leeway in rounding.
@@ -40,7 +40,7 @@ def bandwidth(fiber_run):
 
 def bandwidth_ev(fiber_run):
     ev = fiber_run.make_energy_scale()
-    spectrum = fiber_run.apply_jacob(True)[-1]
+    spectrum = fiber_run.last_jacob(True)
 
     # 0.1 since looking for FWTM of a normalized spectrum
     # made to be 0.0995 for a little leeway in rounding.

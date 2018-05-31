@@ -39,6 +39,9 @@ class fiber_run:
     def spectra(self, normed = False):
         return [spectrum(field, normed) for field in self.fields]
 
+    def last_spectrum(self, normed = False):
+        return spectrum(self.fields[-1], normed)
+
     def fix_units(self):
         # nanometers
         self.params['lambda'] = self.params['lambda']*1e9
@@ -95,19 +98,25 @@ class fiber_run:
         spectra = self.spectra()
         e = self.make_energy_scale()
 
-        spectra = [spectrum[np.where(e >= 0)] for spectrum in spectra]
-        e = e[np.where(e >= 0)]
+        spectra = [spectrum[np.where(e > 0)] for spectrum in spectra]
+        e = e[np.where(e > 0)]
         if normed:
             spectra = [spectrum * hc/np.power(e,2) for spectrum in spectra]
             return [spectrum/max(spectrum) for spectrum in spectra]
         else:
             return [spectrum * hc/np.power(e,2) for spectrum in spectra]
 
-def flip_spectrum(spectrum, mid_ind):
-        new = np.zeros(np.size(spectrum))
-        for i,_ in enumerate(spectrum):
-            new[i] = spectrum[2*mid_ind - i]
-        return new
+    def last_jacob(self, normed = False):
+        spectrum = self.last_spectrum()
+        e = self.make_energy_scale()
+
+        spectrum = spectrum[np.where(e > 0)]
+        e = e[np.where(e > 0)]
+        if normed:
+            spectrum = spectrum * hc/np.power(e,2)
+            return spectrum/max(spectrum)
+        else:
+            return spectrum * hc/np.power(e,2)
 
 def spectrum(field, normed = False):
     # Flip field to have something moving in the right direction.

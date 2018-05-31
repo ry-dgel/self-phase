@@ -26,6 +26,13 @@ class fiber_set:
         if len(fibs.runs) == 0:
             print("No runs matched given value for %s" % param)
         return fibs
+
+    def rem_const_param(self, param, value):
+        fibs = fiber_set([run for run in self.runs 
+                          if run.params[param] != value])
+        if len(fibs.runs) == 0:
+            print("No runs returned")
+        return fibs
     
     # Returns a list of the parameter dictionaries of each fiber_run
     def list_params(self):

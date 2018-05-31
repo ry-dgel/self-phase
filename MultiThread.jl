@@ -78,7 +78,7 @@ end
     # Initialize electric field
     E, zinit = initialize(fname, p, "resume" in ARGS, "keep" in ARGS)
     # Save inital data
-    saveData(fname, E, 0, 0, zinit)
+    saveData(fname, E, 0, zinit)
     # Simulate the whole thing
     simulate(E, p, zinit, fname, numSaves)
 end

@@ -1,9 +1,9 @@
 # Self-Phase Modulation
 ## Code for simulation of SPM on laser pulses through hollow optical fibers from matlab -> julia
-Done by Rigel and Joseph as part of undergraduate thesis.
+Done by Rigel Zifkin and Joseph McGowan as part of our undergraduate thesis.
 
 ```
-julia -p <number of sims to run at once/cores to use> multi-thread.jl <Parameter File> <Number of times to save data>
+julia -p <number of sims to run at once/cores to use> MultiThread.jl <Parameter File> <Number of times to save data>
 ```
 ## Parameters
 Parameters are input as either single numbers, or a triplet defining a range.
@@ -57,9 +57,15 @@ The parameters will also be loaded in, and for ease of use, converted to typical
 * ~~Test~~
 * ~~Use plan fft/ifft to speed up all the transforms~~
 * ~~Multi-Thread drifting~~
-<<<<<<< HEAD
+* Fix analysis scripts
 
 ## Citations
-Original code adapted from  
-=======
->>>>>>> c30ce81a86e3e7b5dcf7da3425b839a1b58a2c51
+Original code adapted from simulation code used in:
+```
+P. Béjot, B. E. Schmidt, J. Kasparian, J.-P. Wolf, and F. Legaré, “Mechanism of hollow-core-fiber infrared-supercontinuum compression with bulk material,” Physical Review A, vol. 81, no. 6, Jun. 2010.
+```
+
+If you use our code, we ask that you cite:
+```
+Coming Soon
+```

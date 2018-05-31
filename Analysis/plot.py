@@ -5,8 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import fiber_set as fs
 
-font = {'family' : 'normal',
-        'size'   : 28}
+font = {'size'   : 24}
 
 matplotlib.rc('font', **font)
 
@@ -20,17 +19,13 @@ def frame_spectra(fiber_set, plist=[], mlist=[]):
     metrics = {metric : [] for metric in mlist}
     for run in fiber_set.runs:
         wl = run.make_wavelength_scale()
-        peak_ind = np.argmin(np.abs(wl - run.params["lambda"]))
         wls.append(wl)
         I = run.apply_jacob(normed = True)[-1]
-#        J = np.zeros(np.size(I))
-#        for i,_ in enumerate(I):
-#            J[i] = I[2*peak_ind - i]
         Is.append(I)
         for param in plist:
-            params[param] = np.concatenate([params[param],np.repeat(run.params[param], len(wl))])
+            params[param] = np.concatenate([np.repeat(run.params[param], len(wl)), params[param]])
         for metric in mlist:
-            metrics[metric] = np.concatenate([metrics[metric],np.repeat(run.metrics[metric], len(wl))])
+            metrics[metric] = np.concatenate([np.repeat(run.metrics[metric], len(wl)), metrics[metric]])
 
     dic = {"wl" : np.concatenate(wls),
             "I" : np.concatenate(Is),
