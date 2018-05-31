@@ -5,7 +5,11 @@ import matplotlib.pyplot as plt
 import matplotlib
 import fiber_set as fs
 
+<<<<<<< HEAD
 font = {'size'   : 24}
+=======
+font = {'size'   : 28}
+>>>>>>> 6a707b2507a248474e81de7f739041063bddd904
 
 matplotlib.rc('font', **font)
 

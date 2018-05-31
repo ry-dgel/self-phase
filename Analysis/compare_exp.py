@@ -27,7 +27,11 @@ ax1.plot(wl,spectrum,color="red", label="Sim.")
 ax1.set_xticks([600,650,700,750,800,850,900])
 ax1.text(0.05, 0.8,r"400$\mu$J")
 ax1.tick_params(direction='in', width = 2, length = 8)
+<<<<<<< HEAD
 ax1.legend(bbox_to_anchor=(0.05, 0.95), loc=2, borderaxespad=0.)
+=======
+plt.legend(bbox_to_anchor=(0.62, 0.95), loc=2, borderaxespad=0.)
+>>>>>>> 6a707b2507a248474e81de7f739041063bddd904
 
 # Second Plot
 run = fibs.runs[2]
