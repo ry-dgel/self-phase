@@ -123,16 +123,16 @@ Saves the important parameters from a dictionary into a file given by fname.
 """
 function saveParams(fname, p)
     open("$fname/params", "w") do f
-        write(f, @sprintf("Energy:    %0.2e\n",  p["Energy"]))
-        write(f, @sprintf("Tfwhm:     %0.2e\n", p["Tfwhm"]))
-        write(f, @sprintf("lambda:    %0.2e\n",  p["λ"]))
+        write(f, @sprintf("Energy:    %.2e\n",  p["Energy"]))
+        write(f, @sprintf("Tfwhm:     %.2e\n", p["Tfwhm"]))
+        write(f, @sprintf("lambda:    %.2e\n",  p["λ"]))
         write(f, @sprintf("dz:        %f\n",     p["dz"]))
         write(f, @sprintf("zmax:      %f\n",     p["zmax"]))
         write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
         write(f, @sprintf("tmax:      %.2e\n",   p["tmax"]))
         write(f, @sprintf("Pin:       %f\n",     p["Pin"]))
         write(f, @sprintf("Pout:      %f\n",     p["Pout"]))
-        write(f, @sprintf("fiberD:    %0.2e\n",  p["fiberD"]))
+        write(f, @sprintf("fiberD:    %.2e\n",  p["fiberD"]))
         if haskey(p, "Chrip")
             write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
         end
@@ -492,8 +492,8 @@ function simulate(E, p, zinit, fname, num_saves)
     while z < p["zmax"]
         if (round(z/p["dz"])%save_every == 0)
             # Async data write
-            @async saveData(fname, E,
-                            calc_duration(E,p["t_vec"]*p["dt"]), z)
+            saveData(fname, E,
+                     calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
         open(fname * "/PlasmaDensity", "a") do f
             write(f, @sprintf("%.5e\n", ρ))
