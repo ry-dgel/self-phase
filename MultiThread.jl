@@ -86,9 +86,6 @@ end
 # Load paramters which are possible list
 lists = YAML.load(open(ARGS[1]))
 # Rename lambda to λ in dictionary.
-if haskey(lists, "lambda")
-    merge!(lists, Dict("λ" => pop!(lists, "lambda")))
-end
 
 # If paramter is a list of form [initial, final, stepsize] convert to list
 # of all paramters in range. Otherwise keep it as a single value.

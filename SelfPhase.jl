@@ -187,6 +187,10 @@ end
 Adds several concrete values and vectors to the parameter dictionary.
 """
 function derive_constants(p)
+    if haskey(p, "lambda")
+        merge!(p, Dict("λ" => pop!(p, "lambda")))
+    end
+    
     f      = c / p["λ"]                 # Pulse Frequency Hz
     ω      = 2*pi*f                       # Pulse Angular Frequency
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
