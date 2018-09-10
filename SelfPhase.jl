@@ -93,7 +93,7 @@ function saveData(fname, E, ΔT_pulse, z)
     open(fname * "/Duration", "a") do f
         write(f, "$(ΔT_pulse)\n")
     end
-    open(fname * "/z", "w") do f
+    open(fname * "/z", "a") do f
         write(f, "$z\n")
     end
 end
@@ -169,6 +169,7 @@ function initialize(fname, p, resume, keep)
             mkdir(fname)
             E = initField(p)
             saveParams(fname, p)
+            writedlm("$fname/times", p["t_vec"])
         end
     else
         mkdir(fname)
