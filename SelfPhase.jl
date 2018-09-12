@@ -140,6 +140,7 @@ function saveParams(fname, p)
             write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
         end
     end
+    writedlm("$fname/t_vec", p["t_vec"])
 end
 
 """
@@ -169,7 +170,7 @@ function initialize(fname, p, resume, keep)
             mkdir(fname)
             E = initField(p)
             saveParams(fname, p)
-            writedlm("$fname/times", p["t_vec"])
+            
         end
     else
         mkdir(fname)
