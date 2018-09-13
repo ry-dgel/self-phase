@@ -491,11 +491,11 @@ function simulate(E, p, zinit, fname, num_saves)
     ##################
     # Initialisation #
     ##################
-    steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
+    nsteps = ceil(Int, (p["zmax"]-zinit)/p["dz"])
 
     # How often to save data.
     if num_saves > 2
-        save_every = ceil((steps-1)/((num_saves)-2))
+        save_every = floor(Int, nsteps/num_saves)
     else
         # Data is explicitely saved at initial and final points.
         save_every = Inf
@@ -508,8 +508,8 @@ function simulate(E, p, zinit, fname, num_saves)
     # Propagation variables
     z = zinit
     ρ = 0
-    while (z < p["zmax"]) & !(z ≈ p["zmax"])
-        if (round(z/p["dz"])%save_every == 0)
+    for i=0:nsteps-1
+        if (i % save_every == 0)
             # Async data write
             saveData(fname, E,
                      calc_duration(E,p["t_vec"]*p["dt"]), z)
