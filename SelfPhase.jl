@@ -243,7 +243,7 @@ function derive_constants(p)
         "λ_max"   => λ_max,
         "λ_min"   => λ_min,
 
-        "n_tot_0" => n_tot_0,a
+        "n_tot_0" => n_tot_0,
 
         "ρ_crit"  => ρ_crit,
         "k_Ar"    => k_Ar
