@@ -14,13 +14,8 @@ julia multi-thread.jl params.yaml 10
 ```
 =#
 
-#=
-    runSim(p, numSaves)
-
-given a dictionary of inital paremeters, and a number of times to save, performs
-the entire simulation with those parameters.
-=#
-
+# Modifications required to pmap to allow for a global
+# progress meter.
 globalProgressMeters = Dict()
 globalProgressValues = Dict()
 globalPrintLock = Dict()
@@ -68,6 +63,12 @@ end
     unlock(globalPrintLock[id])
 end
 
+#=
+    runSim(p, numSaves)
+
+given a dictionary of inital paremeters, and a number of times to save, performs
+the entire simulation with those parameters.
+=#
 @everywhere function runSim(p, numSaves)
     # Derive additional constants and spatial grids
     derive_constants(p)
@@ -85,7 +86,6 @@ end
 
 # Load paramters which are possible list
 lists = YAML.load(open(ARGS[1]))
-# Rename lambda to λ in dictionary.
 
 # If paramter is a list of form [initial, final, stepsize] convert to list
 # of all paramters in range. Otherwise keep it as a single value.
@@ -115,6 +115,7 @@ end
 
 print("Starting Simulations\n")
 prog = Progress(length(param_tuples), 5, "Running Parallel Simulations...")
+update!(prog, 0)
 # Parallel map over all paramters to simulate!
 pmap(jawn -> runSim(Dict{Any,Any}(zip(keys(lists), jawn)), numSaves),
      prog,
