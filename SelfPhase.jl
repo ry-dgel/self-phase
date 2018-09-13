@@ -508,7 +508,7 @@ function simulate(E, p, zinit, fname, num_saves)
     # Propagation variables
     z = zinit
     ρ = 0
-    while z < p["zmax"]
+    while (z < p["zmax"]) & !(z ≈ p["zmax"])
         if (round(z/p["dz"])%save_every == 0)
             # Async data write
             saveData(fname, E,
