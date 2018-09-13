@@ -73,7 +73,7 @@ the entire simulation with those parameters.
     # Derive additional constants and spatial grids
     derive_constants(p)
     # Generate folder string
-    fname = @sprintf("%.0fnm_%.0fμJ_%.2fbar_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fμm",
+    fname = @sprintf("%.0fnm_%.0fuJ_%.2fbar_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fum",
                      p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Pout"], p["Tfwhm"]*1E15,
                      p["zmax"], p["Chirp"], p["fiberD"]*1E6)
     # Initialize electric field
