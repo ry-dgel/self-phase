@@ -25,16 +25,16 @@ BLAS.set_num_threads(nprocs())
 const losses  = 0.13          # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13         # ???
-const Zeff_Ar = 1             # Effective Charge of ionized Argon
+const Zeff_Ar = 1.0           # Effective Charge of ionized Argon
 
 # General Physics Constants
-const c  = 299792458        # Speed of light     m/s
+const c  = 299792458.0      # Speed of light     m/s
 const ħ = 1.0545718E-34     # Reduced Planck     Js
 const me = 9.10938356E-31   # Electron Mass      kg
 const ee = 1.6021766208E-19 # Elementary Charge  C
 const ϵ0 = 8.854187817E-12  # Vaccum Permitivity F/m
 const Kb = 1.38064852E-23   # Boltzmann Constant J/K
-const T  = 300              # ~Room Temperature  K
+const T  = 300.0            # ~Room Temperature  K
 
 # Indices of refraction/dispersion for Argon 1/nm
 const C1 = 0.012055
@@ -86,12 +86,9 @@ function saveData(fname, E, ΔT_pulse, z)
     open(fname * "/E", "a") do f
         #write(f, @sprintf("\# z = %f\n", z))
         for pair in zip(real(E),imag(E))
-            write(f, @sprintf("%.10e,%.10e\n",pair[1],pair[2]))
+            write(f, @sprintf("%.15e,%.15e\n",pair...))
         end
         write(f, "\n")
-    end
-    open(fname * "/Duration", "a") do f
-        write(f, "$(ΔT_pulse)\n")
     end
     open(fname * "/z", "a") do f
         write(f, "$z\n")
@@ -123,21 +120,21 @@ Saves the important parameters from a dictionary into a file given by fname.
 """
 function saveParams(fname, p)
     open("$fname/params", "w") do f
-        write(f, @sprintf("Energy:    %.2e\n",  p["Energy"]))
-        write(f, @sprintf("Tfwhm:     %.2e\n", p["Tfwhm"]))
-        write(f, @sprintf("lambda:    %.2e\n",  p["λ"]))
-        write(f, @sprintf("dz:        %f\n",     p["dz"]))
-        write(f, @sprintf("zmax:      %f\n",     p["zmax"]))
-        write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
-        write(f, @sprintf("tmax:      %.2e\n",   p["tmax"]))
-        write(f, @sprintf("Pin:       %f\n",     p["Pin"]))
-        write(f, @sprintf("Pout:      %f\n",     p["Pout"]))
-        write(f, @sprintf("fiberD:    %.2e\n",  p["fiberD"]))
-        if haskey(p, "Chrip")
-            write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
+        write(f, @sprintf("Energy:    [%e]\n", p["Energy"]))
+        write(f, @sprintf("Tfwhm:     [%e]\n", p["Tfwhm"]))
+        write(f, @sprintf("lambda:    [%e]\n", p["λ"]))
+        write(f, @sprintf("dz:        [%f]\n", p["dz"]))
+        write(f, @sprintf("zmax:      [%f]\n", p["zmax"]))
+        write(f, @sprintf("Nt:        [%d]\n", p["Nt"]))
+        write(f, @sprintf("tmax:      [%e]\n", p["tmax"]))
+        write(f, @sprintf("Pin:       [%f]\n", p["Pin"]))
+        write(f, @sprintf("Pout:      [%f]\n", p["Pout"]))
+        write(f, @sprintf("fiberD:    [%e]\n", p["fiberD"]))
+        if haskey(p, "Chirp")
+            write(f, @sprintf("Chirp:     [%d]\n",     p["Chirp"]))
         end
         if haskey(p, "TOD")
-            write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
+            write(f, @sprintf("TOD:       [%d]\n",     p["TOD"]))
         end
     end
     writedlm("$fname/t_vec", p["t_vec"])
@@ -153,11 +150,14 @@ data already present in folder given by fname.
 """
 function initialize(fname, p, resume, keep)
     zinit = 0
+    # Check for existing folder
     if fname ∈ readdir()
+        # Resume simulations if desired
         if resume
             zinit = float(read("$fname/z"))
             E[:] = readcsv("$fname/E")[end][:]
         else
+            # Don't overwrite data, append number to folder name.
             if keep
                 i = 2
                 while fname*"_($i)" ∈ readdir()
@@ -167,12 +167,13 @@ function initialize(fname, p, resume, keep)
             else
                 rm(fname, recursive=true)
             end
+            # Otherwise make new folder and initialize data
             mkdir(fname)
             E = initField(p)
             saveParams(fname, p)
-            
         end
     else
+        # Otherwise make new folder and initialize data
         mkdir(fname)
         E = initField(p)
         saveParams(fname, p)
@@ -192,7 +193,7 @@ function derive_constants(p)
     if haskey(p, "lambda")
         merge!(p, Dict("λ" => pop!(p, "lambda")))
     end
-    
+
     f      = c / p["λ"]                 # Pulse Frequency Hz
     ω      = 2*pi*f                       # Pulse Angular Frequency
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
@@ -237,12 +238,12 @@ function derive_constants(p)
         "ff"      => ff,
         "ωω"      => ωω,
 
-        s"λ_tot"   => λ_tot,
+        "λ_tot"   => λ_tot,
         "ωω_tot"  => ωω_tot,
         "λ_max"   => λ_max,
         "λ_min"   => λ_min,
 
-        "n_tot_0" => n_tot_0,
+        "n_tot_0" => n_tot_0,a
 
         "ρ_crit"  => ρ_crit,
         "k_Ar"    => k_Ar
@@ -258,17 +259,23 @@ end
 
 Returns a vector representing an electric field defined in terms of the
 peak power and spread of the intial gaussian pulse. Can also handle
-Chipr and TOD. All paramters read from dictionary p.
+Chirp and TOD. All paramters read from dictionary p.
 """
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
-    E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
+    E0            = sqrt(2*p["Power"]/(pi*(p["fiberD"]/2)^2))
     E             = E0 .* E
 
+    # Use get so as to have a default value of zero instead
+    # of an exception in case of Chirp or TOD not being defined.
     Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 +
                      get(p, "TOD", 0) .* p["ωω"] .^ 3
-	E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
-    E              = ifftshift(ifft(ifftshift(E_TF)))
+    if !iszero(Chirp_function)
+	       E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
+           E              = ifftshift(ifft(ifftshift(E_TF)))
+    end
+
+    return E
 end
 
 """
@@ -303,7 +310,7 @@ function prop_lin(p, E, deriv_t_2, losses, ft, ift) #tested
     # Shift to frequency domain and compute linear propagation
     E_TF = fftshift(ft * (fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz"])
     # Shift back to time domain, compute losses and return
-    return ifftshift(ift * (ifftshift(E_TF))).*exp.(-losses/2 * p["dz"])
+    return ifftshift(ift * (ifftshift(E_TF))) .* exp.(-losses/2 * p["dz"])
 end
 
 """
@@ -324,6 +331,7 @@ Smooths a vector by averaging all values within radius of each element.
 function smooth(values, radius)
     smoothed_values = zeros(values)
     for i in eachindex(values)
+        # Handles edges by smoothing over a smaller radius
         temp_radius = minimum([radius, i - 1, length(values) - i])
         smoothed_values[i] = mean(values[(i - temp_radius):(i + temp_radius)])
     end
@@ -434,8 +442,9 @@ function plasma_potential(E,p,Ui) #Tested
     ν0 = Ui / (ħ*p["ω"])
     ν  = ν0 * (1 + 1./(2*γ.^2))
     kmin = minimum(floor.(ν) + 1)
+    # These Values are gas dependent, see paper.
     l=0
-    m=0 #??Why
+    m=0
     n_star = Zeff * sqrt(Uh/Ui)
 
     C_nl2 = 2^(2*n_star) / (n_star*gamma(2*n_star))
@@ -449,7 +458,10 @@ function plasma_potential(E,p,Ui) #Tested
                 (Ui / (2 * Uh)) * A .*
                 (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
                 exp.(-2 * E0 * g ./ (3*E))
-    #potential[isnan.(potential)]=0
+
+    # present in original code, seemingly not needed
+    # potential[isnan.(potential)]=0
+
     return potential
 end
 
@@ -485,6 +497,7 @@ function simulate(E, p, zinit, fname, num_saves)
     if num_saves > 2
         save_every = ceil((steps-1)/((num_saves)-2))
     else
+        # Data is explicitely saved at initial and final points.
         save_every = Inf
     end
 
@@ -557,7 +570,7 @@ function simStep(E, p, z, ft, ift)
     γs = im * ns[2:end] * ks[1]/n[1]
 
     # Propagation
-    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
+    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)   #Linear
     E = steepening(p, E, γs)                          #Steepening
 
     # Plasma
@@ -567,9 +580,13 @@ function simStep(E, p, z, ft, ift)
     plasma_loss[isnan.(plasma_loss)] = 0
 
     # Kerr and Plasma Propagation (NonLinear)
-    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3]
-                    * abs.(E).^6 +
-                    γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
+    kerr_response = -(γs[1] * abs.(E).^2 +
+                      γs[2] * abs.(E).^4 +
+                      γs[3] * abs.(E).^6 +
+                      γs[4] * abs.(E).^8 +
+                      γs[5] * abs.(E).^10
+                     ) * p["dz"]
+
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
 
     return E, maximum(ρ) * 1E-6
