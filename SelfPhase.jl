@@ -473,9 +473,10 @@ Computes the plasma density along the pulse.
 function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
     for i in 1:(p["Nt"]-1)
-        ρ_Ar[i+1] = ρ_Ar[i] +
+        (ρ_Ar[i+1] = ρ_Ar[i] +
                     p["dt"] * (-α*ρ_Ar[i]^2 + Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
                                (coeff2 * abs(E[i])^2)*ρ_Ar[i])
+        ) |> isfinite || throw(ErrorException("Divergence in plasma calculation."))
     end
     return ρ_Ar
 end
