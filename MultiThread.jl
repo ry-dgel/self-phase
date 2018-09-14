@@ -63,6 +63,13 @@ end
     unlock(globalPrintLock[id])
 end
 
+@everywhere function write_stacktrace(fn, st)
+    open(fn*"/error", "w") do f
+        for e=st
+          write(f,string(e)*"\n")
+     end end
+end
+
 #=
     runSim(p, numSaves)
 
@@ -70,18 +77,29 @@ given a dictionary of inital paremeters, and a number of times to save, performs
 the entire simulation with those parameters.
 =#
 @everywhere function runSim(p, numSaves)
+
     # Derive additional constants and spatial grids
     derive_constants(p)
     # Generate folder string
-    fname = @sprintf("%.0fnm_%.0fuJ_%.2fbar_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fum",
-                     p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Pout"], p["Tfwhm"]*1E15,
-                     p["zmax"], p["Chirp"], p["fiberD"]*1E6)
+    fname = @sprintf("%.0fnm_%04.0fuJ_%.2fbar_%.2fbar_%.0ffs_%.1fm_%.0ffs^2_%.0fum",
+                    p["λ"]*1E9, p["Energy"]*1E6, p["Pin"], p["Pout"], p["Tfwhm"]*1E15,
+                    p["zmax"], p["Chirp"], p["fiberD"]*1E6)
     # Initialize electric field
     E, zinit = initialize(fname, p, "resume" in ARGS, "keep" in ARGS)
     # Save inital data
     #saveData(fname, E, 0, zinit)
     # Simulate the whole thing
-    simulate(E, p, zinit, fname, numSaves)
+    try
+        simulate(E, p, zinit, fname, numSaves)
+    catch ex
+        if ex isa PropagationError
+            warn("Error for $fname : $(ex.msg)")
+        else
+            warn("Unexpected error for $fname. Stacktrace written to 'error'" )
+            write_stacktrace(fname, catch_stacktrace())
+            #rethrow(ex)
+        end
+    end
 end
 
 # Load paramters which are possible list

@@ -1,5 +1,5 @@
 module SelfPhase
-export derive_constants, simulate, initialize, saveData
+export derive_constants, simulate, initialize, saveData, PropagationError
 
 using Dierckx
 using SpecialFunctions.dawson
@@ -17,6 +17,10 @@ using YAML
 # Does this speed things up??
 FFTW.set_num_threads(nprocs())
 BLAS.set_num_threads(nprocs())
+
+struct PropagationError <: Exception
+    msg::String
+end
 
 ###################
 # Fixed Constants #
@@ -476,7 +480,7 @@ function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
         (ρ_Ar[i+1] = ρ_Ar[i] +
                     p["dt"] * (-α*ρ_Ar[i]^2 + Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
                                (coeff2 * abs(E[i])^2)*ρ_Ar[i])
-        ) |> isfinite || throw(ErrorException("Divergence in plasma calculation."))
+        ) |> isfinite || throw(PropagationError("Divergence in plasma calculation."))
     end
     return ρ_Ar
 end
