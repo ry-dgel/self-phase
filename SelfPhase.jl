@@ -2,10 +2,14 @@ module SelfPhase
 export derive_constants, simulate, initialize, saveData, PropagationError
 
 using Dierckx
-using SpecialFunctions.dawson
+using Statistics: mean
+using Printf
+using SpecialFunctions: dawson, gamma
 using Base.Filesystem
 using ProgressMeter
 using YAML
+using DelimitedFiles
+using FFTW
 
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
@@ -14,9 +18,6 @@ using YAML
 ██      ██    ██ ██  ██ ██      ██    ██    ██   ██ ██  ██ ██    ██         ██
  ██████  ██████  ██   ████ ███████    ██    ██   ██ ██   ████    ██    ███████
 =#
-# Does this speed things up??
-FFTW.set_num_threads(nprocs())
-BLAS.set_num_threads(nprocs())
 
 struct PropagationError <: Exception
     msg::String
@@ -211,20 +212,20 @@ function derive_constants(p)
     ωω     = (2*pi)*ff                    # Angular frequency grid
 
     # Peak centered Wavelength grid, in nm
-    λ_tot  = 1E9 * c ./ (f + ff)
-    λ_tot_micron = 1E6 * c ./ (f + ff)
+    λ_tot  = 1E9 * c ./ (f .+ ff)
+    λ_tot_micron = 1E6 * c ./ (f .+ ff)
     # Peak centered angular frequency grid
-    ωω_tot = ω+ωω
+    ωω_tot = ω .+ ωω
 
     # Nonlinear index of refraction
-    n_tot_0 = 1 + C1 * (C2 * (λ_tot_micron.^2) ./ (C3 * (λ_tot_micron.^2) -1) +
-                        C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) -1) +
-                        C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) -1))
+    n_tot_0 = 1 .+ C1 * (C2 * (λ_tot_micron.^2) ./ (C3 * (λ_tot_micron.^2) .- 1) +
+                         C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) .- 1) +
+                         C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) .- 1))
 
     λ_min = 400
     λ_max = 1500
-    λ_min = λ_tot[indmin(abs.(λ_tot-λ_min))]
-    λ_max = λ_tot[indmin(abs.(λ_tot-λ_max))]
+    λ_min = λ_tot[argmin(abs.(λ_tot .- λ_min))]
+    λ_max = λ_tot[argmin(abs.(λ_tot .- λ_max))]
 
     ρ_crit = ω^2*me*ϵ0/ee^2
     k_Ar   = ceil(Ui_Ar / (ħ*ω))
@@ -299,7 +300,7 @@ Computes the FHWM of a gaussian peak, doesn't appear to work properly.
 """
 function calc_duration(E, t1) #tested
     center_pulse = sum(t1.*(abs2.(E)))/sum(abs2.(E))
-    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs2.(E))
+    return 2 * sqrt(2*log(2)).*((sum((t1 .- center_pulse).^2 .* abs2.(E))
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
@@ -333,7 +334,7 @@ end
 Smooths a vector by averaging all values within radius of each element.
 """
 function smooth(values, radius)
-    smoothed_values = zeros(values)
+    smoothed_values = zero(values)
     for i in eachindex(values)
         # Handles edges by smoothing over a smaller radius
         temp_radius = minimum([radius, i - 1, length(values) - i])
@@ -383,7 +384,7 @@ function calc_ks(p, n_tot) #tested
 
     # Frequency Disperion
     k_tot = n_tot .* p["ωω_tot"]/c
-    k_tot[p["λ_tot"] .< 245] = maximum(k_tot)
+    k_tot[p["λ_tot"] .< 245] .= maximum(k_tot)
 
     k_first  = 1/c * (dn .* p["ωω_tot"] + n_tot)
     k_second = 1/c * (d2n .* p["ωω_tot"] + 2 * dn)
@@ -411,7 +412,7 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n8_800  =-1.7e-75 * pressure
     n10_800 = 8.8e-94 * pressure
 
-    n_800 = n_tot[indmin(abs.(λ_tot - 800))]
+    n_800 = n_tot[argmin(abs.(λ_tot .- 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
     n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
     n6  = n6_800 * ((n^2 - 1)/(n_800^2-1))^8
@@ -438,13 +439,13 @@ function plasma_potential(E,p,Ui) #Tested
     γ = p["ω"] .* sqrt(2*me*Ui)./(ee*E)
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
-    A = zeros(γ)
+    A = zero(γ)
     β = 2*γ ./ sqrt.(1+γ.^2)
-    α = 2.*asinh.(γ) - β
+    α = 2 * asinh.(γ) - β
 
-    g=3./(2*γ).*((1+1./(2*γ.^2)).*asinh.(γ)-1./β)
+    g=3 ./ (2*γ) .* ((1 + 1 ./ (2*γ.^2)) .* asinh.(γ) - 1 ./ β)
     ν0 = Ui / (ħ*p["ω"])
-    ν  = ν0 * (1 + 1./(2*γ.^2))
+    ν  = ν0 * (1 + 1 ./ (2*γ.^2))
     kmin = minimum(floor.(ν) + 1)
     # These Values are gas dependent, see paper.
     l=0
@@ -543,11 +544,11 @@ function simStep(E, p, z, ft, ift)
     pressure_z = calc_pressure(p["Pin"], p["Pout"], z, p["zmax"])
 
     # Update of n, with cutoffs
-    n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
+    n_tot = sqrt.(complex(1 .+ pressure_z * (p["n_tot_0"].^2 .- 1)))
     n_max = n_tot[findfirst(λ->λ==p["λ_max"], p["λ_tot"])]
-    n_tot[p["λ_tot"] .> p["λ_max"]] = n_max
+    n_tot[p["λ_tot"] .> p["λ_max"]] .= n_max
     n_min = n_tot[findfirst(λ->λ==p["λ_min"], p["λ_tot"])]
-    n_tot[p["λ_tot"] .< p["λ_min"]] = n_min
+    n_tot[p["λ_tot"] .< p["λ_min"]] .= n_min
 
     k_tot, ks = calc_ks(p, n_tot)
     n  = n_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
@@ -569,7 +570,7 @@ function simStep(E, p, z, ft, ift)
     coeff2 = σ/Ui_Ar
 
     # Dispersion and Laplacian Operators
-    dv_t_2_op = k_tot - ks[1] - ks[2] * p["ωω"]
+    dv_t_2_op = k_tot .- ks[1] .- ks[2] * p["ωω"]
 
     # Kerr factors
     γs = im * ns[2:end] * ks[1]/n[1]

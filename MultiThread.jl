@@ -1,6 +1,8 @@
-push!(LOAD_PATH, pwd())
+@everywhere push!(LOAD_PATH, pwd())
 @everywhere using SelfPhase
-using Iterators
+@everywhere using Printf
+using Distributed
+using Base.Iterators: product
 using ProgressMeter
 using YAML
 #=
@@ -14,54 +16,6 @@ julia multi-thread.jl params.yaml 10
 ```
 =#
 
-# Modifications required to pmap to allow for a global
-# progress meter.
-globalProgressMeters = Dict()
-globalProgressValues = Dict()
-globalPrintLock = Dict()
-
-function Base.pmap(f::Function, p::Progress, values...; kwargs...)
-    global globalProgressMeters
-    global globalProgressValues
-    global globalPrintLock
-
-    id = randstring(50)
-    globalProgressMeters[id] = p
-    globalProgressValues[id] = 0
-    globalPrintLock[id] = ReentrantLock()
-
-    passcallback = false
-    kwa = Dict(kwargs)
-    if haskey(kwa,:passcallback)
-      passcallback = true
-      delete!(kwa,:passcallback)
-    end
-
-    out = pmap(values...; kwa...) do x...
-        if passcallback
-          v = f(n -> remotecall(updateProgressMeter, 1, id, n), x...)
-        else
-          v = f(x...)
-          wait(remotecall(updateProgressMeter, 1, id, 1))
-        end
-        v
-    end
-
-    delete!(globalProgressMeters, id)
-    out
-end
-
-#"This is remote-called by all the workers to update the progress."
-@everywhere function updateProgressMeter(id,n)
-    global globalProgressMeters
-    global globalProgressValues
-    global globalPrintLock
-
-    lock(globalPrintLock[id])
-    globalProgressValues[id] += n
-    update!(globalProgressMeters[id] , globalProgressValues[id])
-    unlock(globalPrintLock[id])
-end
 
 @everywhere function write_stacktrace(fn, st)
     open(fn*"/error", "w") do f
@@ -69,7 +23,6 @@ end
           write(f,string(e)*"\n")
      end end
 end
-
 #=
     runSim(p, numSaves)
 
@@ -116,7 +69,7 @@ for key in keys(lists)
 end
 
 # Generate all possible combinations of parameters.
-param_tuples = collect(product(values(lists)...))
+param_tuples = vec(collect(product(values(lists)...)))
 
 # Put all results into a single folder named data.
 if "data" ∉ readdir()
@@ -134,8 +87,21 @@ end
 print("Starting Simulations\n")
 prog = Progress(length(param_tuples), 5, "Running Parallel Simulations...")
 update!(prog, 0)
-# Parallel map over all paramters to simulate!
-pmap(jawn -> runSim(Dict{Any,Any}(zip(keys(lists), jawn)), numSaves),
-     prog,
-     param_tuples)
-ProgressMeter.finish!(prog)
+n = length(param_tuples)
+channel = RemoteChannel(()->Channel{Bool}(n), 1)
+
+@sync begin
+    # this task prints the progress bar
+    @async while take!(channel)
+        next!(prog)
+    end
+
+    # this task does the computation
+    @async begin
+        @distributed for jawn in param_tuples
+            put!(channel, true)
+            runSim(Dict{Any, Any}(zip(keys(lists), jawn)), numSaves)
+        end
+        put!(channel, false) # this tells the printing task to finish
+    end
+end
