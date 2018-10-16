@@ -1,5 +1,6 @@
 # Self-Phase Modulation
-Currently works for Julia 0.6, update to 1.0 in progress.
+This branch is being updated to 1.0 via julia 0.7. Most of the work has been done,
+there's just a bunch of little deprecations to work through.
 ## Code for simulation of SPM on laser pulses through hollow optical fibers from matlab -> julia
 Done by Rigel Zifkin and Joseph McGowan as part of our undergraduate thesis.
 
