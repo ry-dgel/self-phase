@@ -1,7 +1,10 @@
-Julia 0.6
+Julia >0.7
 Revise
 Dierckx
 SpecialFunctions
 ProgressMeter
 Iterators
-#Plots
+Printf
+YAML
+FFTW
+Distributed
