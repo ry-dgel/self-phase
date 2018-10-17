@@ -67,8 +67,14 @@ else
 end
 
 print("Starting Simulations\n")
-prog = Progress(length(param_tuples), 5, "Running Parallel Simulations...")
+
+# Setup progres bar, with initial print of 0%
+prog = Progress(length(param_tuples), 0, "Running Parallel Simulations... ")
 update!(prog, 0)
+# Initial update time has to be set to zero to immediately show bar with zero
+# progress, we then set it to something sane.
+prog.dt = 0.1
+
 n = length(param_tuples)
 channel = RemoteChannel(()->Channel{Bool}(n), 1)
 
@@ -80,10 +86,19 @@ channel = RemoteChannel(()->Channel{Bool}(n), 1)
 
     # this task does the computation
     @async begin
-        @distributed for jawn in param_tuples
-            put!(channel, true)
+        @distributed (+) for jawn in param_tuples
             runSim(Dict{Any, Any}(zip(keys(lists), jawn)), numSaves)
+            put!(channel, true)
+
+            # This block of code __has to__ return an integer or else
+            # each process will hang once a single simulation is done
+            # so just stick it right here.
+            # Removing the "(+)" reducer function as well as this line
+            # will result in a progressbar that never updates.
+            1
         end
         put!(channel, false) # this tells the printing task to finish
     end
 end
+
+print("Simulations Finished\n")

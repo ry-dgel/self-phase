@@ -436,13 +436,13 @@ function plasma_potential(E,p,Ui) #Tested
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
     A = zero(γ)
-    β = 2*γ ./ sqrt.(1+γ.^2)
+    β = 2 * γ ./ sqrt.(1 .+ γ.^2)
     α = 2 * asinh.(γ) - β
 
-    g=3 ./ (2*γ) .* ((1 + 1 ./ (2*γ.^2)) .* asinh.(γ) - 1 ./ β)
+    g = 3 ./ (2*γ) .* ((1 .+ 1 ./ (2*γ.^2)) .* asinh.(γ) - 1 ./ β)
     ν0 = Ui / (ħ*p["ω"])
-    ν  = ν0 * (1 + 1 ./ (2*γ.^2))
-    kmin = minimum(floor.(ν) + 1)
+    ν  = ν0 * (1 .+ 1 ./ (2*γ.^2))
+    kmin = minimum(floor.(ν) .+ 1)
     # These Values are gas dependent, see paper.
     l=0
     m=0
@@ -452,12 +452,12 @@ function plasma_potential(E,p,Ui) #Tested
     f = (2*l+1) * factorial(l+abs(m)) / (2^abs(m)) *
         factorial(abs(m)) * factorial(l-abs(m))
 
-    A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
-             dawson.(sqrt.(complex(abs.(β.*(z - ν))))) for z in kmin:kmin+2])
+    A = sum([4/sqrt(3*π) * γ.^2 ./ (1 .+ γ.^2) .* exp.(-α .* (z .- ν)) .*
+             dawson.(sqrt.(complex(abs.(β.*(z .- ν))))) for z in kmin:kmin+2])
 
     potential = ω_au * C_nl2 * f * sqrt(6/π) *
                 (Ui / (2 * Uh)) * A .*
-                (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
+                (2 * E0./(E .* sqrt.(1 .+ γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
                 exp.(-2 * E0 * g ./ (3*E))
 
     # present in original code, seemingly not needed
@@ -492,7 +492,7 @@ function simulate(E, p, zinit, fname, num_saves)
     ##################
     # Initialisation #
     ##################
-    steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
+    nsteps = ceil(Int, (p["zmax"]-zinit)/p["dz"])
 
     # How often to save data.
     if num_saves > 2
@@ -509,12 +509,13 @@ function simulate(E, p, zinit, fname, num_saves)
     # Propagation variables
     z = zinit
     ρ = 0
-    while z < p["zmax"]
-        if (round(z/p["dz"])%save_every == 0)
-            # Async data write
+    for i = 0:nsteps-1
+        if (i % save_every == 0)
+            # Saving every 'save_every' step
             saveData(fname, E,
                      calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
+
         open(fname * "/PlasmaDensity", "a") do f
             write(f, @sprintf("%.5e\n", ρ))
         end
@@ -577,8 +578,8 @@ function simStep(E, p, z, ft, ift)
     # Plasma
     U_ion = plasma_potential(E, p, Ui_Ar)
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
-    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
-    plasma_loss[isnan.(plasma_loss)] = 0
+    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at .- ρ) * p["dz"]
+    plasma_loss[isnan.(plasma_loss)] .= 0
 
     # Kerr and Plasma Propagation (NonLinear)
     kerr_response = -(γs[1] * abs.(E).^2 +
