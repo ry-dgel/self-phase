@@ -473,7 +473,7 @@ end
 """
     plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2)
 
-Computes the plasma density along the pulse.
+Computes the plasma density along the pulse. Returns units of inverse meters.
 """
 function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
@@ -596,6 +596,7 @@ function simStep(E, p, z, ft, ift)
 
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
 
+    # Return electric field, and max plasma density in inverse cm.
     return E, maximum(ρ) * 1E-6
 end
 
