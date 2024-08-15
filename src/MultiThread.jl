@@ -1,7 +1,8 @@
+using Distributed
 @everywhere push!(LOAD_PATH, pwd())
 @everywhere using SelfPhase
 @everywhere using Printf
-using Distributed
+
 using Base.Iterators: product
 using ProgressMeter
 using YAML
