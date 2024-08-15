@@ -1,0 +1,10 @@
+name = "SelfPhase"
+uuid = "5ca44428-f4cb-4334-939b-db8a2875805f"
+authors = ["ry-dgel <>", "Joetrahedron <>", "Spalato <>"]
+version = "0.1.0"
+
+[compat]
+julia = "1.10"
+
+[workspace]
+projects = ["src"]
