@@ -1,8 +1,15 @@
+module SelfPhase
+export derive_constants, simulate, initialize, saveData, PropagationError
+
 using Dierckx
-using SpecialFunctions.dawson
+using Statistics: mean
+using Printf
+using SpecialFunctions: dawson, gamma
 using Base.Filesystem
 using ProgressMeter
 using YAML
+using DelimitedFiles
+using FFTW
 
 #=
  ██████  ██████  ███    ██ ███████ ████████  █████  ███    ██ ████████ ███████
@@ -11,9 +18,10 @@ using YAML
 ██      ██    ██ ██  ██ ██      ██    ██    ██   ██ ██  ██ ██    ██         ██
  ██████  ██████  ██   ████ ███████    ██    ██   ██ ██   ████    ██    ███████
 =#
-# Does this speed things up??
-FFTW.set_num_threads(nprocs())
-BLAS.set_num_threads(nprocs())
+
+struct PropagationError <: Exception
+    msg::String
+end
 
 ###################
 # Fixed Constants #
@@ -22,16 +30,16 @@ BLAS.set_num_threads(nprocs())
 const losses  = 0.13          # Absorption Coef.        1/m
 const Ui_Ar   = 15.75*1.6E-19 # Ionization Energy of Ar J
 const α       = 7E-13         # ???
-const Zeff_Ar = 1             # Effective Charge of ionized Argon
+const Zeff_Ar = 1.0           # Effective Charge of ionized Argon
 
 # General Physics Constants
-const c  = 299792458        # Speed of light     m/s
+const c  = 299792458.0      # Speed of light     m/s
 const ħ = 1.0545718E-34     # Reduced Planck     Js
 const me = 9.10938356E-31   # Electron Mass      kg
 const ee = 1.6021766208E-19 # Elementary Charge  C
 const ϵ0 = 8.854187817E-12  # Vaccum Permitivity F/m
 const Kb = 1.38064852E-23   # Boltzmann Constant J/K
-const T  = 300              # ~Room Temperature  K
+const T  = 300.0            # ~Room Temperature  K
 
 # Indices of refraction/dispersion for Argon 1/nm
 const C1 = 0.012055
@@ -83,14 +91,11 @@ function saveData(fname, E, ΔT_pulse, z)
     open(fname * "/E", "a") do f
         #write(f, @sprintf("\# z = %f\n", z))
         for pair in zip(real(E),imag(E))
-            write(f, @sprintf("%.10e,%.10e\n",pair[1],pair[2]))
+            write(f, @sprintf("%.15e,%.15e\n",pair...))
         end
         write(f, "\n")
     end
-    open(fname * "/Duration", "a") do f
-        write(f, "$(ΔT_pulse)\n")
-    end
-    open(fname * "/z", "w") do f
+    open(fname * "/z", "a") do f
         write(f, "$z\n")
     end
 end
@@ -120,23 +125,24 @@ Saves the important parameters from a dictionary into a file given by fname.
 """
 function saveParams(fname, p)
     open("$fname/params", "w") do f
-        write(f, @sprintf("Energy:    %0.2e\n",  p["Energy"]))
-        write(f, @sprintf("Tfwhm:     %0.2e\n", p["Tfwhm"]))
-        write(f, @sprintf("lambda:    %0.2e\n",  p["λ"]))
-        write(f, @sprintf("dz:        %f\n",     p["dz"]))
-        write(f, @sprintf("zmax:      %f\n",     p["zmax"]))
-        write(f, @sprintf("Nt:        %d\n",     p["Nt"]))
-        write(f, @sprintf("tmax:      %.2e\n",   p["tmax"]))
-        write(f, @sprintf("Pin:       %f\n",     p["Pin"]))
-        write(f, @sprintf("Pout:      %f\n",     p["Pout"]))
-        write(f, @sprintf("fiberD:    %0.2e\n",  p["fiberD"]))
-        if haskey(p, "Chrip")
-            write(f, @sprintf("Chirp:     %d\n",     p["Chirp"]))
+        write(f, @sprintf("Energy:    [%e]\n", p["Energy"]))
+        write(f, @sprintf("Tfwhm:     [%e]\n", p["Tfwhm"]))
+        write(f, @sprintf("lambda:    [%e]\n", p["λ"]))
+        write(f, @sprintf("dz:        [%f]\n", p["dz"]))
+        write(f, @sprintf("zmax:      [%f]\n", p["zmax"]))
+        write(f, @sprintf("Nt:        [%d]\n", p["Nt"]))
+        write(f, @sprintf("tmax:      [%e]\n", p["tmax"]))
+        write(f, @sprintf("Pin:       [%f]\n", p["Pin"]))
+        write(f, @sprintf("Pout:      [%f]\n", p["Pout"]))
+        write(f, @sprintf("fiberD:    [%e]\n", p["fiberD"]))
+        if haskey(p, "Chirp")
+            write(f, @sprintf("Chirp:     [%d]\n",     p["Chirp"]))
         end
         if haskey(p, "TOD")
-            write(f, @sprintf("TOD:       %d\n",     p["TOD"]))
+            write(f, @sprintf("TOD:       [%d]\n",     p["TOD"]))
         end
     end
+    writedlm("$fname/t_vec", p["t_vec"])
 end
 
 """
@@ -149,11 +155,14 @@ data already present in folder given by fname.
 """
 function initialize(fname, p, resume, keep)
     zinit = 0
+    # Check for existing folder
     if fname ∈ readdir()
+        # Resume simulations if desired
         if resume
             zinit = float(read("$fname/z"))
             E[:] = readcsv("$fname/E")[end][:]
         else
+            # Don't overwrite data, append number to folder name.
             if keep
                 i = 2
                 while fname*"_($i)" ∈ readdir()
@@ -163,11 +172,13 @@ function initialize(fname, p, resume, keep)
             else
                 rm(fname, recursive=true)
             end
+            # Otherwise make new folder and initialize data
             mkdir(fname)
             E = initField(p)
             saveParams(fname, p)
         end
     else
+        # Otherwise make new folder and initialize data
         mkdir(fname)
         E = initField(p)
         saveParams(fname, p)
@@ -184,33 +195,37 @@ end
 Adds several concrete values and vectors to the parameter dictionary.
 """
 function derive_constants(p)
+    if haskey(p, "lambda")
+        merge!(p, Dict("λ" => pop!(p, "lambda")))
+    end
+
     f      = c / p["λ"]                 # Pulse Frequency Hz
     ω      = 2*pi*f                       # Pulse Angular Frequency
     σ_t    = p["Tfwhm"]/sqrt(2*log(2))    # 1-sigma width of pulse
     Power  = sqrt(2/pi) * p["Energy"]/σ_t # Max power delivered by pulse
 
-    dt     = p["tmax"]/(p["Nt"])        # Time step
-    points = (-p["Nt"]/2:1:p["Nt"]/2)
-    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2)*dt  # Time grid iterator
+    dt     = p["tmax"]/(p["Nt"]-1)        # Time step
+    points = (-p["Nt"]/2:1:p["Nt"]/2-1)
+    t_vec  = (-p["Nt"]/2:1:p["Nt"]/2-1)*dt  # Time grid iterator
 
     ff     = points./p["tmax"]            # Frequency grid
     ωω     = (2*pi)*ff                    # Angular frequency grid
 
     # Peak centered Wavelength grid, in nm
-    λ_tot  = 1E9 * c ./ (f + ff)
-    λ_tot_micron = 1E6 * c ./ (f + ff)
+    λ_tot  = 1E9 * c ./ (f .+ ff)
+    λ_tot_micron = 1E6 * c ./ (f .+ ff)
     # Peak centered angular frequency grid
-    ωω_tot = ω+ωω
+    ωω_tot = ω .+ ωω
 
     # Nonlinear index of refraction
-    n_tot_0 = 1 + C1 * (C2 * (λ_tot_micron.^2) ./ (C3 * (λ_tot_micron.^2) -1) +
-                        C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) -1) +
-                        C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) -1))
+    n_tot_0 = 1 .+ C1 * (C2 * (λ_tot_micron.^2) ./ (C3 * (λ_tot_micron.^2) .- 1) +
+                         C4 * (λ_tot_micron.^2) ./ (C5 * (λ_tot_micron.^2) .- 1) +
+                         C6 * (λ_tot_micron.^2) ./ (C7 * (λ_tot_micron.^2) .- 1))
 
     λ_min = 400
     λ_max = 1500
-    λ_min = λ_tot[indmin(abs.(λ_tot-λ_min))]
-    λ_max = λ_tot[indmin(abs.(λ_tot-λ_max))]
+    λ_min = λ_tot[argmin(abs.(λ_tot .- λ_min))]
+    λ_max = λ_tot[argmin(abs.(λ_tot .- λ_max))]
 
     ρ_crit = ω^2*me*ϵ0/ee^2
     k_Ar   = ceil(Ui_Ar / (ħ*ω))
@@ -228,7 +243,7 @@ function derive_constants(p)
         "ff"      => ff,
         "ωω"      => ωω,
 
-        s"λ_tot"   => λ_tot,
+        "λ_tot"   => λ_tot,
         "ωω_tot"  => ωω_tot,
         "λ_max"   => λ_max,
         "λ_min"   => λ_min,
@@ -249,17 +264,23 @@ end
 
 Returns a vector representing an electric field defined in terms of the
 peak power and spread of the intial gaussian pulse. Can also handle
-Chipr and TOD. All paramters read from dictionary p.
+Chirp and TOD. All paramters read from dictionary p.
 """
 function initField(p)
     E             = exp.(-p["t_vec"].^2/p["σ_t"]^2)
-    E0            = sqrt(2*p["Power"]/(pi*p["fiberD"]^2))
+    E0            = sqrt(2*p["Power"]/(pi*(p["fiberD"]/2)^2))
     E             = E0 .* E
 
+    # Use get so as to have a default value of zero instead
+    # of an exception in case of Chirp or TOD not being defined.
     Chirp_function = get(p,"Chirp", 0) * p["ωω"] .^ 2 +
                      get(p, "TOD", 0) .* p["ωω"] .^ 3
-	E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
-    E              = ifftshift(ifft(ifftshift(E_TF)))
+    if !iszero(Chirp_function)
+	       E_TF           = fftshift(fft(fftshift(E))).*exp.(im * Chirp_function)
+           E              = ifftshift(ifft(ifftshift(E_TF)))
+    end
+
+    return E
 end
 
 """
@@ -279,7 +300,7 @@ Computes the FHWM of a gaussian peak, doesn't appear to work properly.
 """
 function calc_duration(E, t1) #tested
     center_pulse = sum(t1.*(abs2.(E)))/sum(abs2.(E))
-    return 2 * sqrt(2*log(2)).*((sum((t1-center_pulse).^2.*abs2.(E))
+    return 2 * sqrt(2*log(2)).*((sum((t1 .- center_pulse).^2 .* abs2.(E))
                                / sum(abs.(E).^2)).^0.5)*1E15
 end
 
@@ -294,7 +315,7 @@ function prop_lin(p, E, deriv_t_2, losses, ft, ift) #tested
     # Shift to frequency domain and compute linear propagation
     E_TF = fftshift(ft * (fftshift(E))) .* exp.(1im*(deriv_t_2)* p["dz"])
     # Shift back to time domain, compute losses and return
-    return ifftshift(ift * (ifftshift(E_TF))).*exp.(-losses/2 * p["dz"])
+    return ifftshift(ift * (ifftshift(E_TF))) .* exp.(-losses/2 * p["dz"])
 end
 
 """
@@ -313,8 +334,9 @@ end
 Smooths a vector by averaging all values within radius of each element.
 """
 function smooth(values, radius)
-    smoothed_values = zeros(values)
+    smoothed_values = zero(values)
     for i in eachindex(values)
+        # Handles edges by smoothing over a smaller radius
         temp_radius = minimum([radius, i - 1, length(values) - i])
         smoothed_values[i] = mean(values[(i - temp_radius):(i + temp_radius)])
     end
@@ -362,7 +384,7 @@ function calc_ks(p, n_tot) #tested
 
     # Frequency Disperion
     k_tot = n_tot .* p["ωω_tot"]/c
-    k_tot[p["λ_tot"] .< 245] = maximum(k_tot)
+    k_tot[p["λ_tot"] .< 245] .= maximum(k_tot)
 
     k_first  = 1/c * (dn .* p["ωω_tot"] + n_tot)
     k_second = 1/c * (d2n .* p["ωω_tot"] + 2 * dn)
@@ -390,7 +412,7 @@ function calc_ns(pressure, n, n_tot, λ_tot) #tested
     n8_800  =-1.7e-75 * pressure
     n10_800 = 8.8e-94 * pressure
 
-    n_800 = n_tot[indmin(abs.(λ_tot - 800))]
+    n_800 = n_tot[argmin(abs.(λ_tot .- 800))]
     n2  = n2_800 * ((n^2 - 1)/(n_800^2-1))^4
     n4  = n4_800 * ((n^2 - 1)/(n_800^2-1))^6
     n6  = n6_800 * ((n^2 - 1)/(n_800^2-1))^8
@@ -417,44 +439,49 @@ function plasma_potential(E,p,Ui) #Tested
     γ = p["ω"] .* sqrt(2*me*Ui)./(ee*E)
     Eh = ee^5*me^2/(ħ^4 * (4*π*ϵ0)^3)
     E0 = Eh * (Ui/Uh) ^ (3/2)
-    A = zeros(γ)
-    β = 2*γ ./ sqrt.(1+γ.^2)
-    α = 2.*asinh.(γ) - β
+    A = zero(γ)
+    β = 2 * γ ./ sqrt.(1 .+ γ.^2)
+    α = 2 * asinh.(γ) - β
 
-    g=3./(2*γ).*((1+1./(2*γ.^2)).*asinh.(γ)-1./β)
+    g = 3 ./ (2*γ) .* ((1 .+ 1 ./ (2*γ.^2)) .* asinh.(γ) - 1 ./ β)
     ν0 = Ui / (ħ*p["ω"])
-    ν  = ν0 * (1 + 1./(2*γ.^2))
-    kmin = minimum(floor.(ν) + 1)
+    ν  = ν0 * (1 .+ 1 ./ (2*γ.^2))
+    kmin = minimum(floor.(ν) .+ 1)
+    # These Values are gas dependent, see paper.
     l=0
-    m=0 #??Why
+    m=0
     n_star = Zeff * sqrt(Uh/Ui)
 
     C_nl2 = 2^(2*n_star) / (n_star*gamma(2*n_star))
     f = (2*l+1) * factorial(l+abs(m)) / (2^abs(m)) *
         factorial(abs(m)) * factorial(l-abs(m))
 
-    A = sum([4/sqrt(3*π) * γ.^2 ./ (1+γ.^2) .* exp.(-α .* (z-ν)) .*
-             dawson.(sqrt.(complex(abs.(β.*(z - ν))))) for z in kmin:kmin+2])
+    A = sum([4/sqrt(3*π) * γ.^2 ./ (1 .+ γ.^2) .* exp.(-α .* (z .- ν)) .*
+             dawson.(sqrt.(complex(abs.(β.*(z .- ν))))) for z in kmin:kmin+2])
 
     potential = ω_au * C_nl2 * f * sqrt(6/π) *
                 (Ui / (2 * Uh)) * A .*
-                (2 * E0./(E .* sqrt.(1+γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
+                (2 * E0./(E .* sqrt.(1 .+ γ.^2))).^(2 * n_star - abs(m) - 3/2) .*
                 exp.(-2 * E0 * g ./ (3*E))
-    #potential[isnan.(potential)]=0
+
+    # present in original code, seemingly not needed
+    # potential[isnan.(potential)]=0
+
     return potential
 end
 
 """
     plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2)
 
-Computes the plasma density along the pulse.
+Computes the plasma density along the pulse. Returns units of inverse meters.
 """
 function plasma(p, α, ρ_at, Potentiel_Ar, E, coeff2) #tested
     ρ_Ar = zeros(size(E))
     for i in 1:(p["Nt"]-1)
-        ρ_Ar[i+1] = ρ_Ar[i] +
+        (ρ_Ar[i+1] = ρ_Ar[i] +
                     p["dt"] * (-α*ρ_Ar[i]^2 + Potentiel_Ar[i]*(ρ_at - ρ_Ar[i]) +
                                (coeff2 * abs(E[i])^2)*ρ_Ar[i])
+        ) |> isfinite || throw(PropagationError("Divergence in plasma calculation."))
     end
     return ρ_Ar
 end
@@ -470,14 +497,13 @@ function simulate(E, p, zinit, fname, num_saves)
     ##################
     # Initialisation #
     ##################
-    # Setting up progress meter
-    steps = round(Int, p["zmax"]/p["dz"])-round(Int, zinit/p["dz"])
-    prog = Progress(steps, 0.1)
+    nsteps = ceil(Int, (p["zmax"]-zinit)/p["dz"])
 
     # How often to save data.
     if num_saves > 2
-        save_every = ceil((steps-1)/((num_saves)-2))
+        save_every = floor(Int, nsteps/num_saves)
     else
+        # Data is explicitely saved at initial and final points.
         save_every = Inf
     end
 
@@ -488,26 +514,21 @@ function simulate(E, p, zinit, fname, num_saves)
     # Propagation variables
     z = zinit
     ρ = 0
-    while z < p["zmax"]
-        if (round(z/p["dz"])%save_every == 0)
-            # Async data write
-            @async saveData(fname, E,
-                            calc_duration(E,p["t_vec"]*p["dt"]), z)
+    for i = 0:nsteps-1
+        if (i % save_every == 0)
+            # Saving every 'save_every' step
+            saveData(fname, E,
+                     calc_duration(E,p["t_vec"]*p["dt"]), z)
         end
-        ρ_max = maximum(ρ*1E-6)
-        @async open(fname * "/PlasmaDensity", "a") do f
-            write(f, "$(ρ_max)\n")
+
+        open(fname * "/PlasmaDensity", "a") do f
+            write(f, @sprintf("%.5e\n", ρ))
         end
 
         E, ρ = simStep(E, p, z, ft, ift)
 
-
         # Update Distance
         z += p["dz"]
-
-        zstring = @sprintf("%.3f/%.3f m", z, p["zmax"])
-        denstring = @sprintf("%.9f", maximum(ρ*1E-6))
-        ProgressMeter.next!(prog, showvalues=[(:z, zstring),(:ρ, denstring)])
     end
 
     #Save final data
@@ -524,11 +545,11 @@ function simStep(E, p, z, ft, ift)
     pressure_z = calc_pressure(p["Pin"], p["Pout"], z, p["zmax"])
 
     # Update of n, with cutoffs
-    n_tot = sqrt.(complex(1+pressure_z * (p["n_tot_0"].^2 - 1)))
+    n_tot = sqrt.(complex(1 .+ pressure_z * (p["n_tot_0"].^2 .- 1)))
     n_max = n_tot[findfirst(λ->λ==p["λ_max"], p["λ_tot"])]
-    n_tot[p["λ_tot"] .> p["λ_max"]] = n_max
+    n_tot[p["λ_tot"] .> p["λ_max"]] .= n_max
     n_min = n_tot[findfirst(λ->λ==p["λ_min"], p["λ_tot"])]
-    n_tot[p["λ_tot"] .< p["λ_min"]] = n_min
+    n_tot[p["λ_tot"] .< p["λ_min"]] .= n_min
 
     k_tot, ks = calc_ks(p, n_tot)
     n  = n_tot[findfirst(x->x==p["ω"],p["ωω_tot"])]
@@ -550,26 +571,34 @@ function simStep(E, p, z, ft, ift)
     coeff2 = σ/Ui_Ar
 
     # Dispersion and Laplacian Operators
-    dv_t_2_op = k_tot - ks[1] - ks[2] * p["ωω"]
+    dv_t_2_op = k_tot .- ks[1] .- ks[2] * p["ωω"]
 
     # Kerr factors
     γs = im * ns[2:end] * ks[1]/n[1]
 
     # Propagation
-    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)    #Linear
+    E = prop_lin(p, E, -dv_t_2_op, losses, ft, ift)   #Linear
     E = steepening(p, E, γs)                          #Steepening
 
-   # Plasma
+    # Plasma
     U_ion = plasma_potential(E, p, Ui_Ar)
     ρ = plasma(p, α, ρ_at, U_ion, E, coeff2)
-    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at - ρ) * p["dz"]
-    plasma_loss[isnan.(plasma_loss)] = 0
+    plasma_loss = U_ion ./ (2 * abs.(E).^2) * Ui_Ar .* (ρ_at .- ρ) * p["dz"]
+    plasma_loss[isnan.(plasma_loss)] .= 0
 
     # Kerr and Plasma Propagation (NonLinear)
-    kerr_response = -(γs[1]*(abs.(E)).^2 + γs[2]*(abs.(E)).^4 + γs[3]
-                    * abs.(E).^6 +
-                    γs[4]*abs.(E).^8 + γs[5].*abs.(E).^10) * p["dz"]
+    kerr_response = -(γs[1] * abs.(E).^2 +
+                      γs[2] * abs.(E).^4 +
+                      γs[3] * abs.(E).^6 +
+                      γs[4] * abs.(E).^8 +
+                      γs[5] * abs.(E).^10
+                     ) * p["dz"]
+
     E = prop_non_lin(p, E, rrr, ρ, plasma_loss, kerr_response)
 
-    return E, ρ
+    # Return electric field, and max plasma density in inverse cm.
+    return E, maximum(ρ) * 1E-6
+end
+
+#module
 end
